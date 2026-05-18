@@ -990,10 +990,15 @@
                             }
                         }
 
-                        // Auto-select facilitator's story for non-facilitators
-                        if (currentRole !== 'facilitator' && session.currentStoryId && session.currentStoryId !== currentSelectedStoryId) {
+                        // Auto-select facilitator's story for participants only if:
+                        // 1. There's a current story to sync to
+                        // 2. Participant is not already on that story
+                        // 3. The current story is actively being voted on (not finished)
+                        // 4. Participant hasn't voted yet on that story
+                        if (currentRole === 'participant' && session.currentStoryId && session.currentStoryId !== currentSelectedStoryId) {
                             const currentStory = session.stories.find(s => s.id === session.currentStoryId);
-                            if (currentStory) {
+                            const hasVoted = currentStory?.votes && currentStory.votes[currentUserId];
+                            if (currentStory && !currentStory.finished && !hasVoted) {
                                 selectStory(session.currentStoryId);
                             }
                         }
