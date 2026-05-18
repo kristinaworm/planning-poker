@@ -1351,8 +1351,10 @@
             story.votingStarted = true;
             await saveData();
 
-            // Re-render vote cards to show them as active
-            renderVoteCards(story);
+            // Re-render vote cards for participants to show them as active
+            if (currentRole === 'participant') {
+                renderVoteCards(story);
+            }
 
             timeRemaining = TIMER_DURATION;
             document.getElementById('startTimerBtn').disabled = true;
@@ -1492,18 +1494,26 @@
                 // Determine if this user can vote (only on current voting story that hasn't finished)
                 const canVote = currentRole === 'participant' && !story.finished && isCurrentVotingStory;
 
-                // Timer and finish button - only for facilitators during active voting
-                if (currentRole === 'facilitator' && !story.finished) {
+                // Show timer for facilitators and observers during active voting
+                if (!story.finished && (currentRole === 'facilitator' || currentRole === 'observer')) {
                     timerSection.style.display = 'block';
-                    finishVotingBtn.style.display = 'block';
-                    document.getElementById('startTimerBtn').disabled = false;
-                    document.getElementById('startTimerBtn').textContent = 'Start Timer';
-                    timeRemaining = TIMER_DURATION;
-                    document.getElementById('timerDisplay').textContent = '2:00';
-                    document.getElementById('timerProgress').style.width = '100%';
-                    document.getElementById('timerDisplay').className = 'timer-display';
-                    document.getElementById('timerProgress').className = 'timer-progress';
-                    stopTimer(); // Clear any running timer
+
+                    if (currentRole === 'facilitator') {
+                        // Facilitators can control the timer
+                        finishVotingBtn.style.display = 'block';
+                        document.getElementById('startTimerBtn').disabled = false;
+                        document.getElementById('startTimerBtn').textContent = 'Start Timer';
+                        timeRemaining = TIMER_DURATION;
+                        document.getElementById('timerDisplay').textContent = '2:00';
+                        document.getElementById('timerProgress').style.width = '100%';
+                        document.getElementById('timerDisplay').className = 'timer-display';
+                        document.getElementById('timerProgress').className = 'timer-progress';
+                        stopTimer(); // Clear any running timer
+                    } else {
+                        // Observers see timer but can't control it
+                        document.getElementById('startTimerBtn').style.display = 'none';
+                        finishVotingBtn.style.display = 'none';
+                    }
                 } else {
                     timerSection.style.display = 'none';
                     finishVotingBtn.style.display = 'none';
@@ -1516,6 +1526,20 @@
                 } else {
                     selectEstimateText.style.display = 'none';
                     document.getElementById('voteCards').innerHTML = '';
+                }
+
+                // Show voting in progress message for observers
+                if (currentRole === 'observer' && !story.finished && isCurrentVotingStory) {
+                    const votingMessage = `
+                        <div style="background: #dbeafe; border: 2px solid #0066b2; border-radius: 6px; padding: 15px; margin-bottom: 15px; color: #1e40af;">
+                            <strong>🗳️ Voting in Progress</strong><br>
+                            <span style="font-size: 14px;">The team is estimating this story. Watch the timer above to see how much time remains.</span>
+                        </div>
+                    `;
+                    document.getElementById('votesDisplay').innerHTML = votingMessage;
+                } else if (currentRole !== 'observer' || story.finished) {
+                    // Show votes for non-observers or when voting is finished
+                    renderVotes(story);
                 }
 
                 // Show vote summary for all roles (includes info banner if viewing previous results)
