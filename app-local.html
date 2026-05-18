@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sleep Number Planning Poker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #003d7a 0%, #0066b2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        nav {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        nav h1 {
+            color: #003d7a;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            background: #0066b2;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #003d7a;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 102, 178, 0.4);
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .home-view, .session-view {
+            display: none;
+        }
+
+        .home-view.active, .session-view.active {
+            display: block;
+        }
+
+        .hero {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .hero h2 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            border-color: #0066b2;
+            transform: translateY(-4px);
+        }
+
+        .card h4 {
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .card p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #0066b2;
+            box-shadow: 0 0 0 3px rgba(0, 102, 178, 0.1);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #718096;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .form-actions button {
+            flex: 1;
+        }
+
+        .session-header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .session-header h2 {
+            color: #2d3748;
+        }
+
+        .session-grid {
+            display: grid;
+            grid-template-columns: 1fr 3fr;
+            gap: 20px;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-card h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .participant-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .participant {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #2d3748;
+        }
+
+        .participant::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #48bb78;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .main-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .story-item {
+            padding: 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .story-item:hover {
+            border-color: #0066b2;
+            background: #f0f5fb;
+        }
+
+        .story-item.active {
+            border-color: #0066b2;
+            background: #e6f0fa;
+        }
+
+        .story-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .vote-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .vote-card {
+            aspect-ratio: 1;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 24px;
+            cursor: pointer;
+            background: white;
+            color: #2d3748;
+            transition: all 0.2s;
+        }
+
+        .vote-card:hover {
+            border-color: #0066b2;
+            background: #e6f0fa;
+        }
+
+        .vote-card.voted {
+            background: #0066b2;
+            color: white;
+            border-color: #0066b2;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #48bb78;
+            color: white;
+            padding: 16px 24px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1001;
+        }
+
+        .toast.error {
+            background: #f56565;
+        }
+
+        .estimate-result {
+            text-align: center;
+            padding: 20px;
+            background: #c6f6d5;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        .estimate-value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #22543d;
+        }
+
+        @media (max-width: 768px) {
+            .session-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .vote-cards {
+                grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <h1>😴 Sleep Number Planning Poker</h1>
+        </nav>
+
+        <!-- Home View -->
+        <div class="home-view active">
+            <div class="hero">
+                <h2>Sleep Number Planning Poker</h2>
+                <p>Estimate user stories and features efficiently with your team in real-time</p>
+            </div>
+
+            <div class="card-grid">
+                <div class="card" onclick="showCreateSessionForm()">
+                    <h4>Create New Session</h4>
+                    <p>Start a new planning poker session for your team to estimate stories together.</p>
+                    <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">+ Create</button>
+                </div>
+
+                <div class="card" onclick="showJoinSessionForm()">
+                    <h4>Join Existing Session</h4>
+                    <p>Join an active session using a code to participate in real-time estimation.</p>
+                    <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">Join</button>
+                </div>
+
+                <div class="card" onclick="loadSessions()">
+                    <h4>Browse Sessions</h4>
+                    <p>View all active planning poker sessions and see what your team is working on.</p>
+                    <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">Browse</button>
+                </div>
+            </div>
+
+            <div id="sessionsList" style="display: none;">
+                <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto;">
+                    <h3 style="color: #2d3748; margin-bottom: 20px;">Active Sessions</h3>
+                    <div id="sessionsListContent"></div>
+                    <button class="btn btn-primary" onclick="goHome()" style="width: 100%; margin-top: 15px;">Back</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session View -->
+        <div class="session-view">
+            <div class="session-header">
+                <div>
+                    <h2 id="sessionTitle"></h2>
+                    <p id="sessionStats" style="color: #718096; margin-top: 5px;"></p>
+                </div>
+                <button class="btn btn-danger" onclick="closeSession()">Close Session</button>
+            </div>
+
+            <div class="session-grid">
+                <div class="sidebar">
+                    <div class="sidebar-card">
+                        <h3>Participants</h3>
+                        <div class="participant-list" id="participantsList"></div>
+                    </div>
+                    <button class="btn btn-success" style="width: 100%;" onclick="showAddStoryForm()">+ Add Story</button>
+                </div>
+
+                <div class="main-content">
+                    <div style="margin-bottom: 30px;">
+                        <h3 style="color: #2d3748; margin-bottom: 15px;">Stories</h3>
+                        <div id="storiesList"></div>
+                    </div>
+
+                    <div id="votingArea" style="display: none;">
+                        <h3 id="currentStoryTitle" style="color: #2d3748;"></h3>
+                        <p id="currentStoryDesc" style="color: #718096; margin: 10px 0;"></p>
+
+                        <p style="margin-bottom: 15px; color: #718096; font-size: 14px;">
+                            Select your estimate:
+                        </p>
+
+                        <div class="vote-cards" id="voteCards"></div>
+
+                        <button class="btn btn-primary" style="width: 100%;" onclick="finishVoting()">Finish Voting</button>
+
+                        <div id="votesDisplay"></div>
+                        <div id="estimateResult"></div>
+                    </div>
+
+                    <div id="emptyState" style="text-align: center; padding: 40px 20px; color: #718096;">
+                        <p>Select a story to start voting</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Session Modal -->
+    <div class="modal" id="createSessionModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('createSessionModal')">✕</button>
+            <h3 style="color: #2d3748;">Create New Session</h3>
+            <div style="margin-top: 20px;">
+                <div class="form-group">
+                    <label>Session Name *</label>
+                    <input type="text" id="sessionNameInput" placeholder="Sprint 24 Planning">
+                </div>
+                <div class="form-group">
+                    <label>Your Name *</label>
+                    <input type="text" id="participantNameInput" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label>Your Role *</label>
+                    <select id="roleSelect">
+                        <option value="facilitator">Facilitator (runs the session)</option>
+                        <option value="participant">Participant (votes on stories)</option>
+                        <option value="observer">Observer (watches only)</option>
+                    </select>
+                </div>
+                <div style="background: #f0f5fb; padding: 15px; border-radius: 6px; margin-top: 15px;">
+                    <label style="display: flex; align-items: center; margin-bottom: 0; cursor: pointer;">
+                        <input type="checkbox" id="useJiraCheckbox" style="margin-right: 8px; cursor: pointer;">
+                        <span style="font-size: 14px; font-weight: 500;">Pre-load stories from Jira</span>
+                    </label>
+                </div>
+                <div id="jiraConfigForm" style="display: none; margin-top: 15px; padding: 15px; background: #fafbfc; border-radius: 6px; border-left: 3px solid #0066b2;">
+                    <div class="form-group">
+                        <label>Jira URL *</label>
+                        <input type="text" id="jiraUrl" placeholder="https://your-domain.atlassian.net">
+                    </div>
+                    <div class="form-group">
+                        <label>Email *</label>
+                        <input type="email" id="jiraEmail" placeholder="your-email@company.com">
+                    </div>
+                    <div class="form-group">
+                        <label>API Token *</label>
+                        <input type="password" id="jiraToken" placeholder="Your Jira API token">
+                    </div>
+                    <div class="form-group">
+                        <label>Project Key *</label>
+                        <input type="text" id="jiraProjectKey" placeholder="PROJ">
+                    </div>
+                    <button class="btn btn-primary" style="width: 100%;" onclick="fetchJiraIssues()">Fetch Issues</button>
+                </div>
+                <div id="jiraIssuesContainer" style="display: none; margin-top: 15px;">
+                    <div id="jiraIssuesList"></div>
+                    <button class="btn btn-success" style="width: 100%; margin-top: 10px;" onclick="importSelectedJiraIssues()">Import Selected Issues</button>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="createSession()">Create Session</button>
+                    <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('createSessionModal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Session Modal -->
+    <div class="modal" id="joinSessionModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('joinSessionModal')">✕</button>
+            <h3 style="color: #2d3748;">Join Session</h3>
+            <div style="margin-top: 20px;">
+                <div class="form-group">
+                    <label>Session Code *</label>
+                    <input type="text" id="sessionCodeInput" placeholder="e.g., ABC123">
+                </div>
+                <div class="form-group">
+                    <label>Your Name *</label>
+                    <input type="text" id="joinParticipantInput" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label>Your Role *</label>
+                    <select id="joinRoleSelect">
+                        <option value="facilitator">Facilitator (runs the session)</option>
+                        <option value="participant">Participant (votes on stories)</option>
+                        <option value="observer">Observer (watches only)</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="joinSession()">Join</button>
+                    <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('joinSessionModal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Story Modal -->
+    <div class="modal" id="addStoryModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('addStoryModal')">✕</button>
+            <h3 style="color: #2d3748;">Add Story</h3>
+            <div style="margin-top: 20px;">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="storyTitleInput" placeholder="User can view their profile">
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="storyDescInput" placeholder="Story details" style="min-height: 80px;"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="addStory()">Add</button>
+                    <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('addStoryModal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAupvStPEgEi1Zy7T8I2EkvXM-yNzgBruA",
+            authDomain: "apps-planning-poker.firebaseapp.com",
+            databaseURL: "https://apps-planning-poker-default-rtdb.firebaseio.com",
+            projectId: "apps-planning-poker",
+            storageBucket: "apps-planning-poker.firebasestorage.app",
+            messagingSenderId: "778083403365",
+            appId: "1:778083403365:web:de88625d3264fb8eff688c"
+        };
+
+        // Data storage
+        let allSessions = [];
+        let currentSessionId = null;
+        let currentUserId = null;
+        let currentRole = null;
+        let currentUser = null;
+        let useFirebase = true;
+        let refreshInterval = null;
+        let selectedJiraIssues = [];
+        const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
+
+        // Firebase REST API calls
+        async function firebaseGet(path) {
+            try {
+                const url = `${firebaseConfig.databaseURL}/${path}.json`;
+                const response = await fetch(url);
+                if (response.ok) {
+                    return await response.json();
+                }
+                throw new Error(`Firebase error: ${response.status}`);
+            } catch (error) {
+                console.error('Firebase GET error:', error);
+                return null;
+            }
+        }
+
+        async function firebasePut(path, data) {
+            try {
+                const url = `${firebaseConfig.databaseURL}/${path}.json`;
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    return await response.json();
+                }
+                throw new Error(`Firebase error: ${response.status}`);
+            } catch (error) {
+                console.error('Firebase PUT error:', error);
+                useFirebase = false;
+                loadData();
+                showToast('Using local storage. Firebase not available.', 'error');
+                return null;
+            }
+        }
+
+        async function firebasePost(path, data) {
+            try {
+                const url = `${firebaseConfig.databaseURL}/${path}.json`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    return await response.json();
+                }
+                throw new Error(`Firebase error: ${response.status}`);
+            } catch (error) {
+                console.error('Firebase POST error:', error);
+                useFirebase = false;
+                loadData();
+                return null;
+            }
+        }
+
+        // Load data from Firebase or localStorage
+        async function loadData() {
+            if (useFirebase) {
+                try {
+                    const data = await firebaseGet('sessions');
+                    if (data) {
+                        allSessions = Object.values(data).filter(s => s);
+                        return;
+                    }
+                } catch (e) {
+                    useFirebase = false;
+                }
+            }
+
+            // Load from localStorage (either as fallback or if Firebase is disabled)
+            const saved = localStorage.getItem('planningPokerSessions');
+            if (saved) {
+                try {
+                    allSessions = JSON.parse(saved);
+                } catch (e) {
+                    allSessions = [];
+                }
+            } else {
+                allSessions = [];
+            }
+        }
+
+        // Save data to Firebase or localStorage
+        async function saveData() {
+            const sessionsObj = {};
+            allSessions.forEach(s => sessionsObj[s.id] = s);
+
+            if (useFirebase) {
+                const result = await firebasePut('sessions', sessionsObj);
+                // If Firebase failed, it will have set useFirebase = false
+                // Fall through to localStorage save below
+            }
+
+            // Always save to localStorage as backup
+            if (!useFirebase) {
+                localStorage.setItem('planningPokerSessions', JSON.stringify(allSessions));
+            }
+        }
+
+        // Refresh data from Firebase periodically
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                if (useFirebase && currentSessionId) {
+                    loadData();
+                    const session = allSessions.find(s => s.id === currentSessionId);
+                    if (session) {
+                        renderSession(currentSessionId);
+                    }
+                }
+            }, 2000);
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+        }
+
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+
+        function generateCode() {
+            return Math.random().toString(36).substr(2, 6).toUpperCase();
+        }
+
+        // Modal
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        function showCreateSessionForm() {
+            document.getElementById('sessionNameInput').value = '';
+            document.getElementById('participantNameInput').value = '';
+            document.getElementById('roleSelect').value = 'facilitator';
+            document.getElementById('useJiraCheckbox').checked = false;
+            document.getElementById('jiraConfigForm').style.display = 'none';
+            document.getElementById('jiraIssuesContainer').style.display = 'none';
+            document.getElementById('createSessionModal').classList.add('active');
+
+            // Setup Jira checkbox listener
+            document.getElementById('useJiraCheckbox').onchange = (e) => {
+                document.getElementById('jiraConfigForm').style.display = e.target.checked ? 'block' : 'none';
+            };
+        }
+
+        // Jira Integration
+        async function fetchJiraIssues() {
+            const jiraUrl = document.getElementById('jiraUrl').value.trim();
+            const jiraEmail = document.getElementById('jiraEmail').value.trim();
+            const jiraToken = document.getElementById('jiraToken').value.trim();
+            const projectKey = document.getElementById('jiraProjectKey').value.trim().toUpperCase();
+
+            if (!jiraUrl || !jiraEmail || !jiraToken || !projectKey) {
+                showToast('Please fill in all Jira fields', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Fetching...';
+
+            try {
+                const jql = `project = "${projectKey}" AND status NOT IN (Done, Closed) ORDER BY created DESC LIMIT 50`;
+                const auth = btoa(`${jiraEmail}:${jiraToken}`);
+                const jiraApiUrl = `${jiraUrl}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50&fields=key,summary,description,status`;
+
+                // Try direct fetch first (if CORS is allowed)
+                let response = await fetch(jiraApiUrl, {
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(async (e) => {
+                    // If direct fetch fails due to CORS, use proxy
+                    const corsProxy = 'https://api.allorigins.win/raw?url=';
+                    const url = corsProxy + encodeURIComponent(jiraApiUrl);
+                    return fetch(url, {
+                        headers: {
+                            'Authorization': `Basic ${auth}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        throw new Error('Invalid Jira credentials');
+                    } else if (response.status === 403) {
+                        throw new Error('Access denied - check permissions');
+                    }
+                    throw new Error(`Jira API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (!data.issues || data.issues.length === 0) {
+                    showToast('No issues found', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Fetch Issues';
+                    return;
+                }
+
+                selectedJiraIssues = data.issues.map(issue => ({
+                    key: issue.key,
+                    summary: issue.fields.summary,
+                    description: issue.fields.description?.plainText || '',
+                    selected: false
+                }));
+
+                const issuesList = document.getElementById('jiraIssuesList');
+                issuesList.innerHTML = `
+                    <h4 style="color: #2d3748; margin-bottom: 10px;">Found ${selectedJiraIssues.length} issue(s)</h4>
+                    ${selectedJiraIssues.map((issue, idx) => `
+                        <div style="display: flex; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 8px;">
+                            <input type="checkbox" id="jira_${idx}" onchange="selectedJiraIssues[${idx}].selected = this.checked;" style="margin-right: 10px; cursor: pointer;">
+                            <div style="flex: 1;">
+                                <label for="jira_${idx}" style="cursor: pointer;">
+                                    <strong style="color: #0066b2;">${issue.key}</strong> - ${issue.summary}
+                                </label>
+                            </div>
+                        </div>
+                    `).join('')}
+                `;
+
+                document.getElementById('jiraIssuesContainer').style.display = 'block';
+                showToast(`Found ${selectedJiraIssues.length} issues`);
+            } catch (error) {
+                showToast(`Jira error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Fetch Issues';
+            }
+        }
+
+        function importSelectedJiraIssues() {
+            const selected = selectedJiraIssues.filter(i => i.selected);
+            if (selected.length === 0) {
+                showToast('Select at least one issue', 'error');
+                return;
+            }
+            window.jiraIssuesToImport = selected;
+            window.jiraConfig = {
+                url: document.getElementById('jiraUrl').value.trim(),
+                email: document.getElementById('jiraEmail').value.trim(),
+                token: document.getElementById('jiraToken').value.trim(),
+                projectKey: document.getElementById('jiraProjectKey').value.trim().toUpperCase()
+            };
+            showToast(`${selected.length} issue(s) ready to import`);
+        }
+
+        function showJoinSessionForm() {
+            document.getElementById('sessionCodeInput').value = '';
+            document.getElementById('joinParticipantInput').value = '';
+            document.getElementById('joinRoleSelect').value = 'participant';
+            document.getElementById('joinSessionModal').classList.add('active');
+        }
+
+        function showAddStoryForm() {
+            document.getElementById('storyTitleInput').value = '';
+            document.getElementById('storyDescInput').value = '';
+            document.getElementById('addStoryModal').classList.add('active');
+        }
+
+        // Create session
+        async function createSession() {
+            const name = document.getElementById('sessionNameInput').value.trim();
+            const participantName = document.getElementById('participantNameInput').value.trim();
+            const role = document.getElementById('roleSelect').value;
+
+            if (!name || !participantName) {
+                showToast('Please fill in all fields', 'error');
+                return;
+            }
+
+            const sessionId = generateId();
+            const code = generateCode();
+            const userId = generateId();
+
+            let stories = [];
+
+            // Import Jira issues if selected
+            if (window.jiraIssuesToImport && window.jiraIssuesToImport.length > 0) {
+                stories = window.jiraIssuesToImport.map(issue => ({
+                    id: generateId(),
+                    title: issue.summary,
+                    description: issue.description,
+                    jiraKey: issue.key,
+                    votes: {},
+                    estimate: null
+                }));
+            }
+
+            const session = {
+                id: sessionId,
+                code: code,
+                name: name,
+                createdAt: new Date().toISOString(),
+                status: 'active',
+                participants: [{ id: userId, name: participantName, role: role }],
+                stories: stories,
+                jiraConfig: window.jiraConfig || null
+            };
+
+            allSessions.push(session);
+            await saveData();
+
+            currentSessionId = sessionId;
+            currentUserId = userId;
+            currentRole = role;
+            currentUser = session.participants[0];
+
+            // Reset Jira data
+            window.jiraIssuesToImport = null;
+            window.jiraConfig = null;
+
+            closeModal('createSessionModal');
+            await enterSession(sessionId);
+            const importMsg = stories.length > 0 ? ` with ${stories.length} Jira issue(s)` : '';
+            showToast(`Session created! Code: ${code}${importMsg}`);
+        }
+
+        // Join session
+        async function joinSession() {
+            const code = document.getElementById('sessionCodeInput').value.trim().toUpperCase();
+            const participantName = document.getElementById('joinParticipantInput').value.trim();
+            const role = document.getElementById('joinRoleSelect').value;
+
+            if (!code || !participantName) {
+                showToast('Please fill in all fields', 'error');
+                return;
+            }
+
+            await loadData();
+            const session = allSessions.find(s => s.code === code && s.status === 'active');
+            if (!session) {
+                showToast('Session not found', 'error');
+                return;
+            }
+
+            const userId = generateId();
+            session.participants.push({ id: userId, name: participantName, role: role });
+            await saveData();
+
+            currentSessionId = session.id;
+            currentUserId = userId;
+            currentRole = role;
+            currentUser = { id: userId, name: participantName, role: role };
+
+            closeModal('joinSessionModal');
+            await enterSession(session.id);
+            showToast('Joined session!');
+        }
+
+        // Enter session
+        async function enterSession(sessionId) {
+            document.querySelector('.home-view').classList.remove('active');
+            document.querySelector('.session-view').classList.add('active');
+            await loadData();
+            renderSession(sessionId);
+            startAutoRefresh();
+        }
+
+        // Render session
+        function renderSession(sessionId) {
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            document.getElementById('sessionTitle').textContent = session.name;
+            document.getElementById('sessionStats').textContent =
+                `Code: ${session.code} | ${session.participants.length} participant(s) | ${session.stories.length} stor${session.stories.length !== 1 ? 'ies' : 'y'}`;
+
+            renderParticipants(session.participants);
+            renderStories(session.stories);
+        }
+
+        function renderParticipants(participants) {
+            const list = document.getElementById('participantsList');
+            list.innerHTML = participants.map(p =>
+                `<div class="participant">${p.name} <span style="font-size: 11px; margin-left: 5px;">• ${p.role}</span></div>`
+            ).join('');
+        }
+
+        function renderStories(stories) {
+            const list = document.getElementById('storiesList');
+            if (stories.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No stories yet</p>';
+                return;
+            }
+
+            list.innerHTML = stories.map(story => {
+                const badgeClass = story.estimate ? 'background: #c6f6d5; color: #22543d;' : 'background: #feebc8; color: #c05621;';
+                const badgeText = story.estimate ? `✓ Done (${story.estimate})` : 'Pending';
+                const jiraKeyDisplay = story.jiraKey ? `<span style="color: #0066b2; margin-right: 8px; font-weight: 600;">🔗 ${story.jiraKey}</span>` : '';
+
+                return `
+                    <div class="story-item" onclick="selectStory('${story.id}')">
+                        <div class="story-title">${jiraKeyDisplay}${story.title}</div>
+                        <div style="font-size: 12px; color: #718096; margin: 8px 0;">${story.description || 'No description'}</div>
+                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Select story
+        function selectStory(storyId) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+
+            if (currentRole === 'observer') {
+                showToast('Observers cannot vote', 'error');
+                return;
+            }
+
+            document.getElementById('currentStoryTitle').textContent = story.title;
+            document.getElementById('currentStoryDesc').textContent = story.description || 'No description';
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('votingArea').style.display = 'block';
+
+            renderVoteCards(story);
+            renderVotes(story);
+        }
+
+        function renderVoteCards(story) {
+            const userVote = story.votes ? story.votes[currentUserId] : null;
+
+            const cards = document.getElementById('voteCards');
+            cards.innerHTML = CARD_VALUES.map(value => `
+                <button class="vote-card ${userVote === value ? 'voted' : ''}"
+                        onclick="vote('${story.id}', ${typeof value === 'string' ? `'${value}'` : value})">${value}</button>
+            `).join('');
+        }
+
+        async function vote(storyId, value) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+
+            if (!story.votes) story.votes = {};
+            story.votes[currentUserId] = value;
+            await saveData();
+
+            renderVoteCards(story);
+            renderVotes(story);
+        }
+
+        function renderVotes(story) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const votes = story.votes || {};
+            const voteList = Object.entries(votes).map(([userId, value]) => {
+                const participant = session.participants.find(p => p.id === userId);
+                return `
+                    <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
+                        <span>${participant?.name || 'Unknown'}</span>
+                        <span style="background: #0066b2; color: white; padding: 4px 12px; border-radius: 4px;">${value}</span>
+                    </div>
+                `;
+            }).join('');
+
+            if (Object.keys(votes).length > 0) {
+                document.getElementById('votesDisplay').innerHTML = `
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-top: 20px;">
+                        <h4 style="margin-bottom: 15px; color: #2d3748;">Votes (${Object.keys(votes).length})</h4>
+                        ${voteList}
+                    </div>
+                `;
+            }
+        }
+
+        async function syncToJira(storyId) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+
+            if (!story || !story.jiraKey || !session.jiraConfig) {
+                showToast('Story not linked to Jira', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Syncing...';
+
+            try {
+                const config = session.jiraConfig;
+                const auth = btoa(`${config.email}:${config.token}`);
+                const issueUrl = `${config.url}/rest/api/3/issues/${story.jiraKey}`;
+
+                // Try direct fetch first, with fallback to proxy
+                let updateResponse = await fetch(issueUrl, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            customfield_10005: parseFloat(story.estimate)
+                        }
+                    })
+                }).catch(async (e) => {
+                    // If direct fails, use proxy
+                    const corsProxy = 'https://api.allorigins.win/raw?url=';
+                    return fetch(corsProxy + encodeURIComponent(issueUrl), {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Basic ${auth}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            fields: {
+                                customfield_10005: parseFloat(story.estimate)
+                            }
+                        })
+                    });
+                });
+
+                if (!updateResponse.ok) {
+                    throw new Error(`Failed to sync: ${updateResponse.status}`);
+                }
+
+                showToast(`✓ Synced to Jira: ${story.jiraKey}`);
+            } catch (error) {
+                showToast(`Sync error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sync to Jira';
+            }
+        }
+
+        async function finishVoting() {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => {
+                const votes = s.votes || {};
+                return Object.keys(votes).length > 0;
+            });
+
+            if (!story) {
+                showToast('Need at least one vote', 'error');
+                return;
+            }
+
+            const votes = Object.values(story.votes || {});
+            const numericValues = votes.filter(v => !isNaN(v) && v !== '?').map(Number);
+
+            let estimate;
+            if (numericValues.length > 0) {
+                const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+                estimate = Math.round(avg);
+            } else {
+                estimate = votes[0];
+            }
+
+            story.estimate = estimate;
+            await saveData();
+
+            const syncButton = story.jiraKey && session.jiraConfig ?
+                `<button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="syncToJira('${story.id}')">🔗 Sync to Jira</button>` : '';
+
+            document.getElementById('estimateResult').innerHTML = `
+                <div class="estimate-result">
+                    <h4>✓ Voting Complete</h4>
+                    <div class="estimate-value">${estimate}</div>
+                    ${syncButton}
+                </div>
+            `;
+
+            showToast(`Estimate: ${estimate}`);
+
+            setTimeout(() => {
+                document.getElementById('votingArea').style.display = 'none';
+                document.getElementById('emptyState').style.display = 'block';
+                document.getElementById('estimateResult').innerHTML = '';
+                document.getElementById('votesDisplay').innerHTML = '';
+                renderStories(session.stories);
+            }, 3000);
+        }
+
+        // Add story
+        async function addStory() {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can add stories', 'error');
+                return;
+            }
+
+            const title = document.getElementById('storyTitleInput').value.trim();
+            const desc = document.getElementById('storyDescInput').value.trim();
+
+            if (!title) {
+                showToast('Story title is required', 'error');
+                return;
+            }
+
+            const session = allSessions.find(s => s.id === currentSessionId);
+            session.stories.push({
+                id: generateId(),
+                title: title,
+                description: desc,
+                votes: {},
+                estimate: null
+            });
+
+            await saveData();
+            closeModal('addStoryModal');
+            renderStories(session.stories);
+            showToast('Story added!');
+        }
+
+        // Close session
+        async function closeSession() {
+            if (confirm('Close this session?')) {
+                const session = allSessions.find(s => s.id === currentSessionId);
+                session.status = 'closed';
+                await saveData();
+                goHome();
+                showToast('Session closed');
+            }
+        }
+
+        // Load sessions
+        async function loadSessions() {
+            await loadData();
+            const activeSessions = allSessions.filter(s => s.status === 'active');
+            const content = document.getElementById('sessionsListContent');
+
+            if (activeSessions.length === 0) {
+                content.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No active sessions</p>';
+            } else {
+                content.innerHTML = activeSessions.map(s => `
+                    <div class="card" style="margin-bottom: 10px;">
+                        <strong>${s.name}</strong>
+                        <p style="font-size: 12px; color: #718096; margin: 8px 0;">
+                            Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${s.stories.length} stor${s.stories.length !== 1 ? 'ies' : 'y'}
+                        </p>
+                        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="fillSessionCode('${s.code}')">Join</button>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('sessionsList').style.display = 'block';
+        }
+
+        function fillSessionCode(code) {
+            document.getElementById('sessionCodeInput').value = code;
+            document.getElementById('joinSessionModal').classList.add('active');
+        }
+
+        function goHome() {
+            stopAutoRefresh();
+            currentSessionId = null;
+            currentUserId = null;
+            currentRole = null;
+            document.querySelector('.home-view').classList.add('active');
+            document.querySelector('.session-view').classList.remove('active');
+            document.getElementById('sessionsList').style.display = 'none';
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast${type === 'error' ? ' error' : ''}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Initialize
+        (async () => {
+            await loadData();
+            if (useFirebase) {
+                console.log('✓ Using Firebase for real-time multi-user collaboration');
+            } else {
+                console.log('⚠ Using localStorage (local only)');
+                showToast('Using local storage - changes not synced to Firebase', 'error');
+            }
+        })();
+    </script>
+</body>
+</html>
