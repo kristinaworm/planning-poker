@@ -1624,11 +1624,20 @@
             // Load past session into full view
             currentSessionId = sessionId;
 
-            // Check if current user is a facilitator in this session
-            const storageKey = `user_${session.code}`;
-            const storedUserId = localStorage.getItem(storageKey);
-            const participant = session.participants.find(p => p.id === storedUserId);
-            currentRole = participant ? participant.role : 'viewer';
+            // Check if current user is a facilitator in this session by checking all session codes we have stored
+            let userRole = 'viewer';
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('user_')) {
+                    const storedUserId = localStorage.getItem(key);
+                    const participant = session.participants.find(p => p.id === storedUserId);
+                    if (participant && participant.role === 'facilitator') {
+                        userRole = 'facilitator';
+                        break;
+                    }
+                }
+            }
+            currentRole = userRole;
 
             closeModal('pastSessionsModal');
             document.querySelector('.home-view').classList.remove('active');
