@@ -391,6 +391,19 @@
             border-color: #0066b2;
         }
 
+        .vote-card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: #e2e8f0;
+            border-color: #cbd5e0;
+            color: #a0aec0;
+        }
+
+        .vote-card.disabled:hover {
+            border-color: #cbd5e0;
+            background: #e2e8f0;
+        }
+
         .toast {
             position: fixed;
             bottom: 20px;
@@ -1286,16 +1299,17 @@
         let timeRemaining = 120;
         const TIMER_DURATION = 120;
 
-        function startTimer() {
+        async function startTimer() {
             if (timerInterval) return; // Already running
 
             const session = allSessions.find(s => s.id === currentSessionId);
-            const story = session.stories.find(s => {
-                const votes = s.votes || {};
-                return Object.keys(votes).length > 0;
-            });
+            const story = session.stories.find(s => s.id === currentSelectedStoryId);
 
             if (!story) return;
+
+            // Mark voting as officially started
+            story.votingStarted = true;
+            await saveData();
 
             timeRemaining = TIMER_DURATION;
             document.getElementById('startTimerBtn').disabled = true;
@@ -1421,17 +1435,16 @@
                 // Check if this is the current story being voted on
                 const isCurrentVotingStory = !session.currentStoryId || session.currentStoryId === storyId;
 
-                // Determine if this user can vote
+                // Determine if this user can vote (only on current voting story that hasn't finished)
                 const canVote = currentRole === 'participant' && !story.finished && isCurrentVotingStory;
 
-                // Show warning if not on current voting story
-                let warningHtml = '';
-                if (currentRole !== 'facilitator' && !isCurrentVotingStory) {
-                    const currentStory = session.stories.find(s => s.id === session.currentStoryId);
-                    warningHtml = `
-                        <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; padding: 12px; margin-bottom: 15px; color: #92400e;">
-                            <strong>⏳ Story not yet selected</strong><br>
-                            <span style="font-size: 14px;">Waiting for facilitator to select "${currentStory?.title || 'next story'}" for voting</span>
+                // Show info message if viewing a previous story's results
+                let infoHtml = '';
+                if (story.finished && !isCurrentVotingStory) {
+                    infoHtml = `
+                        <div style="background: #dbeafe; border: 2px solid #0066b2; border-radius: 6px; padding: 12px; margin-bottom: 15px; color: #1e40af;">
+                            <strong>📊 Viewing Previous Results</strong><br>
+                            <span style="font-size: 14px;">This story's voting has been completed. See the results below.</span>
                         </div>
                     `;
                 }
@@ -1453,7 +1466,7 @@
                     finishVotingBtn.style.display = 'none';
                 }
 
-                // Show vote cards only for participants who can vote on current story
+                // Show vote cards only for participants voting on current story
                 if (canVote) {
                     selectEstimateText.style.display = 'block';
                     renderVoteCards(story);
@@ -1462,24 +1475,34 @@
                     document.getElementById('voteCards').innerHTML = '';
                 }
 
-                // Show warning if applicable
-                if (warningHtml) {
-                    document.getElementById('votesDisplay').innerHTML = warningHtml;
-                } else {
-                    // Show vote summary for all roles
-                    renderVotes(story);
+                // Show vote summary for all roles
+                renderVotes(story);
+
+                // Prepend info message if viewing previous results
+                if (infoHtml) {
+                    const votesDisplayElement = document.getElementById('votesDisplay');
+                    const currentContent = votesDisplayElement.innerHTML;
+                    votesDisplayElement.innerHTML = infoHtml + currentContent;
                 }
             }
         }
 
         function renderVoteCards(story) {
             const userVote = story.votes ? story.votes[currentUserId] : null;
+            const votingStarted = story.votingStarted === true;
 
             const cards = document.getElementById('voteCards');
-            cards.innerHTML = CARD_VALUES.map(value => `
-                <button class="vote-card ${userVote === value ? 'voted' : ''}"
-                        onclick="vote('${story.id}', ${typeof value === 'string' ? `'${value}'` : value})">${value}</button>
-            `).join('');
+            cards.innerHTML = CARD_VALUES.map(value => {
+                const isVoted = userVote === value;
+                const disabledClass = !votingStarted ? 'disabled' : '';
+                const disabledAttr = !votingStarted ? 'disabled' : '';
+
+                return `
+                    <button class="vote-card ${isVoted ? 'voted' : ''} ${disabledClass}"
+                            onclick="vote('${story.id}', ${typeof value === 'string' ? `'${value}'` : value})"
+                            ${disabledAttr}>${value}</button>
+                `;
+            }).join('');
         }
 
         async function vote(storyId, value) {
@@ -1507,6 +1530,12 @@
 
             const story = session.stories.find(s => s.id === storyId);
 
+            // Check if voting has been officially started by facilitator
+            if (story.votingStarted === false) {
+                showToast('Voting has not started yet. Wait for the facilitator to start the timer.', 'error');
+                return;
+            }
+
             if (!story.votes) story.votes = {};
             story.votes[currentUserId] = value;
             await saveData();
@@ -1519,9 +1548,12 @@
             const session = allSessions.find(s => s.id === currentSessionId);
             const votes = story.votes || {};
 
-            // During voting, only show own vote. After finished, show all votes
+            // During voting:
+            // - Participants only see their own vote (to prevent bias)
+            // - Facilitators and Observers see all votes
+            // After voting, everyone sees all votes
             let displayVotes = votes;
-            if (!story.finished) {
+            if (!story.finished && currentRole === 'participant') {
                 displayVotes = currentUserId in votes ? { [currentUserId]: votes[currentUserId] } : {};
             }
 
@@ -1797,7 +1829,8 @@
                 title: title,
                 votes: {},
                 estimate: null,
-                questions: []
+                questions: [],
+                votingStarted: false
             };
 
             // Add Jira link if provided
