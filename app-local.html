@@ -1099,16 +1099,22 @@
             const shareSessionBtn = document.getElementById('shareSessionBtn');
             const closeSessionBtn = document.getElementById('closeSessionBtn');
             const deleteSessionBtn = document.getElementById('deleteSessionBtn');
+            const addStoryBtn = document.getElementById('addStoryBtn');
+            const questionFormArea = document.getElementById('questionFormArea');
+
             if (currentRole === 'facilitator') {
                 startSessionBtn.style.display = session.status === 'pending' ? 'block' : 'none';
                 shareSessionBtn.style.display = 'block';
                 closeSessionBtn.style.display = 'block';
-                deleteSessionBtn.style.display = 'block';
+                deleteSessionBtn.style.display = 'none';
+                addStoryBtn.style.display = 'block';
+                questionFormArea.style.display = 'block';
             } else {
                 startSessionBtn.style.display = 'none';
                 shareSessionBtn.style.display = 'none';
                 closeSessionBtn.style.display = 'none';
                 deleteSessionBtn.style.display = 'none';
+                addStoryBtn.style.display = 'none';
             }
 
             renderParticipants(session.participants);
