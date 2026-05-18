@@ -507,6 +507,12 @@
                     <p>View all active planning poker sessions and see what your team is working on.</p>
                     <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">Browse</button>
                 </div>
+
+                <div class="card" onclick="loadPastSessions()">
+                    <h4>Past Sessions</h4>
+                    <p>View completed and closed planning poker sessions with final estimates.</p>
+                    <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">View</button>
+                </div>
             </div>
 
     <!-- Browse Sessions Modal -->
@@ -518,6 +524,30 @@
             <div style="display: flex; gap: 10px;">
                 <button class="btn btn-primary" style="flex: 1;" onclick="closeModal('sessionsModal')">Close</button>
                 <button class="btn btn-danger" id="deleteAllBtn" style="flex: 1; display: none;" onclick="deleteAllSessions()">Delete All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Past Sessions Modal -->
+    <div class="modal" id="pastSessionsModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('pastSessionsModal')">✕</button>
+            <h3 style="color: #2d3748;">Past Sessions</h3>
+            <div id="pastSessionsListContent" style="margin-top: 20px; margin-bottom: 20px;"></div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="closeModal('pastSessionsModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Past Session Details Modal -->
+    <div class="modal" id="pastSessionDetailsModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('pastSessionDetailsModal')">✕</button>
+            <h3 id="detailsSessionTitle" style="color: #2d3748;"></h3>
+            <div id="pastSessionDetails" style="margin-top: 20px;"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="goBackToPastSessions()">← Back to Sessions</button>
             </div>
         </div>
     </div>
@@ -1533,6 +1563,8 @@
                     const isReturningUser = storedUserId && s.participants.some(p => p.id === storedUserId);
                     const buttonText = isReturningUser ? 'Re-Join' : 'Join';
                     const buttonAction = isReturningUser ? `directRejoin('${s.code}')` : `fillSessionCode('${s.code}')`;
+                    const deleteButton = currentRole === 'facilitator' ?
+                        `<button class="btn btn-danger" style="width: 100%; margin-top: 5px;" onclick="deleteSession('${s.id}')">Delete</button>` : '';
 
                     return `
                         <div class="card" style="margin-bottom: 10px;">
@@ -1541,6 +1573,7 @@
                                 Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}
                             </p>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="${buttonAction}">${buttonText}</button>
+                            ${deleteButton}
                         </div>
                     `;
                 }).join('');
@@ -1550,6 +1583,76 @@
             document.getElementById('deleteAllBtn').style.display = currentRole === 'facilitator' ? 'block' : 'none';
 
             document.getElementById('sessionsModal').classList.add('active');
+        }
+
+        async function loadPastSessions() {
+            await loadData();
+            const closedSessions = allSessions.filter(s => s.status === 'closed');
+            const content = document.getElementById('pastSessionsListContent');
+
+            if (closedSessions.length === 0) {
+                content.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No past sessions yet</p>';
+            } else {
+                content.innerHTML = closedSessions.map(s => {
+                    const storyCount = (s.stories || []).length;
+                    const completedStories = (s.stories || []).filter(st => st.estimate).length;
+                    const createdDate = new Date(s.createdAt).toLocaleDateString();
+
+                    return `
+                        <div class="card" style="margin-bottom: 10px;">
+                            <strong>${s.name}</strong>
+                            <p style="font-size: 12px; color: #718096; margin: 8px 0;">
+                                Created: ${createdDate} | ${s.participants.length} participant(s) | ${completedStories}/${storyCount} stories estimated
+                            </p>
+                            <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="viewPastSessionDetails('${s.id}')">View Details</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            document.getElementById('pastSessionsModal').classList.add('active');
+        }
+
+        function viewPastSessionDetails(sessionId) {
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            document.getElementById('detailsSessionTitle').textContent = session.name;
+
+            let detailsHtml = `
+                <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                    <p style="color: #718096; font-size: 12px; margin-bottom: 10px;">
+                        Created: ${new Date(session.createdAt).toLocaleString()} | ${session.participants.length} participants
+                    </p>
+                </div>
+
+                <div style="background: #f7fafc; padding: 15px; border-radius: 6px;">
+                    <h4 style="color: #2d3748; margin-bottom: 15px;">Stories & Estimates</h4>
+            `;
+
+            if (!session.stories || session.stories.length === 0) {
+                detailsHtml += '<p style="color: #718096;">No stories in this session</p>';
+            } else {
+                detailsHtml += session.stories.map(story => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #e2e8f0;">
+                        <span style="color: #2d3748; flex: 1; font-weight: 500;">${story.title}</span>
+                        <span style="background: ${story.estimate ? '#c6f6d5' : '#feebc8'}; color: ${story.estimate ? '#22543d' : '#c05621'}; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 12px;">
+                            ${story.estimate || 'Pending'}
+                        </span>
+                    </div>
+                `).join('');
+            }
+
+            detailsHtml += '</div>';
+
+            document.getElementById('pastSessionDetails').innerHTML = detailsHtml;
+            closeModal('pastSessionsModal');
+            document.getElementById('pastSessionDetailsModal').classList.add('active');
+        }
+
+        function goBackToPastSessions() {
+            closeModal('pastSessionDetailsModal');
+            loadPastSessions();
         }
 
         function fillSessionCode(code) {
@@ -1605,6 +1708,22 @@
                 document.body.removeChild(textarea);
                 showToast('Link copied to clipboard!');
             });
+        }
+
+        async function deleteSession(sessionId) {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can delete sessions', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            if (confirm(`Delete session "${session.name}"? This cannot be undone.`)) {
+                allSessions = allSessions.filter(s => s.id !== sessionId);
+                await saveData();
+                showToast('Session deleted');
+                loadSessions();
+            }
         }
 
         async function deleteAllSessions() {
