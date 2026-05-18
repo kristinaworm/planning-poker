@@ -1040,7 +1040,7 @@
             }
 
             await loadData();
-            const session = allSessions.find(s => s.code === code && s.status === 'active');
+            const session = allSessions.find(s => s.code === code && (s.status === 'active' || s.status === 'pending'));
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
@@ -1142,6 +1142,23 @@
             renderStories(session.stories);
         }
 
+        async function deleteParticipant(participantId) {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can remove participants', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const participant = session.participants.find(p => p.id === participantId);
+            if (!participant) return;
+
+            if (confirm(`Remove ${participant.name} from the session?`)) {
+                session.participants = session.participants.filter(p => p.id !== participantId);
+                await saveData();
+                renderParticipants(session.participants);
+                showToast(`${participant.name} removed from session`);
+            }
+        }
+
         function renderParticipants(participants) {
             const list = document.getElementById('participantsList');
 
@@ -1154,11 +1171,17 @@
             list.innerHTML = participants.map(p => {
                 const config = roleConfig[p.role] || { icon: '•', label: p.role };
                 const roleClass = p.role === 'participant' ? 'participant-role' : p.role;
+                const deleteBtn = currentRole === 'facilitator' && p.id !== currentUserId ?
+                    `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px; margin-left: 8px;" onclick="deleteParticipant('${p.id}'); event.stopPropagation();">✕</button>` : '';
+
                 return `
-                    <div class="participant ${roleClass}">
-                        <span class="participant-icon">${config.icon}</span>
-                        <span class="participant-name">${p.name}</span>
-                        <span class="participant-badge ${roleClass}">${config.label}</span>
+                    <div class="participant ${roleClass}" style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; flex: 1;">
+                            <span class="participant-icon">${config.icon}</span>
+                            <span class="participant-name">${p.name}</span>
+                            <span class="participant-badge ${roleClass}">${config.label}</span>
+                        </div>
+                        ${deleteBtn}
                     </div>
                 `;
             }).join('');
