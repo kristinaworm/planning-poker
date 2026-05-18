@@ -1283,12 +1283,7 @@
 
                 return `
                     <div class="story-item ${draggableClass} ${currentVotingClass}" data-story-id="${story.id}" data-story-index="${index}" ${draggableAttr}
-                         onclick="selectStory('${story.id}')"
-                         ondragstart="handleDragStart(event)"
-                         ondragover="handleDragOver(event)"
-                         ondrop="handleDragDrop(event)"
-                         ondragleave="handleDragLeave(event)"
-                         ondragend="handleDragEnd(event)">
+                         onclick="selectStory('${story.id}')">
                         <div class="story-title">${jiraDisplay}${story.title}</div>
                         <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
                         ${actionButtons}
@@ -1296,15 +1291,17 @@
                 `;
             }).join('');
 
-            // Attach drag event listeners
-            const storyItems = list.querySelectorAll('.story-item.draggable');
-            storyItems.forEach(item => {
-                item.addEventListener('dragstart', handleDragStart);
-                item.addEventListener('dragover', handleDragOver);
-                item.addEventListener('drop', handleDragDrop);
-                item.addEventListener('dragleave', handleDragLeave);
-                item.addEventListener('dragend', handleDragEnd);
-            });
+            // Attach drag event listeners to draggable items
+            if (currentRole === 'facilitator') {
+                const storyItems = list.querySelectorAll('.story-item.draggable');
+                storyItems.forEach(item => {
+                    item.addEventListener('dragstart', handleDragStart, false);
+                    item.addEventListener('dragover', handleDragOver, false);
+                    item.addEventListener('drop', handleDragDrop, false);
+                    item.addEventListener('dragleave', handleDragLeave, false);
+                    item.addEventListener('dragend', handleDragEnd, false);
+                });
+            }
         }
 
         // Timer functionality
@@ -1385,6 +1382,17 @@
         async function selectStory(storyId) {
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session.stories.find(s => s.id === storyId);
+
+            // Check if participant is trying to browse away before voting
+            if (currentRole === 'participant' && session.currentStoryId && session.currentStoryId !== storyId) {
+                const currentStory = session.stories.find(s => s.id === session.currentStoryId);
+                const hasVoted = currentStory?.votes && currentStory.votes[currentUserId];
+
+                if (currentStory && !currentStory.finished && !hasVoted) {
+                    showToast('🎯 Eyes on the prize! Cast your vote first, then you can explore other stories.', 'error');
+                    return;
+                }
+            }
 
             // Track current selected story for questions
             currentSelectedStoryId = storyId;
@@ -1656,37 +1664,48 @@
 
         // Drag and drop handlers
         function handleDragStart(event) {
-            draggedStoryId = event.currentTarget.dataset.storyId;
-            event.currentTarget.classList.add('dragging');
+            if (!event.target.classList.contains('story-item')) return;
+            draggedStoryId = event.target.dataset.storyId;
+            event.target.classList.add('dragging');
             event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/html', event.currentTarget.innerHTML);
+            event.dataTransfer.setData('text/html', event.target.innerHTML);
         }
 
         function handleDragOver(event) {
             event.preventDefault();
             event.dataTransfer.dropEffect = 'move';
-            const storyItem = event.currentTarget.closest('.story-item');
+            if (!event.target.classList.contains('story-item')) return;
+
+            const storyItem = event.target.classList.contains('story-item') ? event.target : event.target.closest('.story-item');
             if (storyItem && storyItem.dataset.storyId !== draggedStoryId) {
+                // Remove drag-over from all items
+                document.querySelectorAll('.story-item.drag-over').forEach(item => {
+                    item.classList.remove('drag-over');
+                });
                 storyItem.classList.add('drag-over');
             }
         }
 
         function handleDragLeave(event) {
-            const storyItem = event.currentTarget.closest('.story-item');
-            if (storyItem) {
-                storyItem.classList.remove('drag-over');
-            }
+            if (!event.target.classList.contains('story-item')) return;
+            event.target.classList.remove('drag-over');
         }
 
         async function handleDragDrop(event) {
             event.preventDefault();
             event.stopPropagation();
 
-            const dropTarget = event.currentTarget.closest('.story-item');
-            if (!dropTarget || dropTarget.dataset.storyId === draggedStoryId) return;
+            const dropTarget = event.target.classList.contains('story-item') ? event.target : event.target.closest('.story-item');
+            if (!dropTarget || dropTarget.dataset.storyId === draggedStoryId) {
+                draggedStoryId = null;
+                return;
+            }
 
             const session = allSessions.find(s => s.id === currentSessionId);
-            if (!session) return;
+            if (!session) {
+                draggedStoryId = null;
+                return;
+            }
 
             const draggedIndex = session.stories.findIndex(s => s.id === draggedStoryId);
             const dropIndex = session.stories.findIndex(s => s.id === dropTarget.dataset.storyId);
@@ -1706,7 +1725,8 @@
         }
 
         function handleDragEnd(event) {
-            event.currentTarget.classList.remove('dragging');
+            if (!event.target.classList.contains('story-item')) return;
+            event.target.classList.remove('dragging');
             document.querySelectorAll('.story-item').forEach(item => {
                 item.classList.remove('drag-over');
             });
