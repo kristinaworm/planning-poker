@@ -499,13 +499,18 @@
                 </div>
             </div>
 
-            <div id="sessionsList" style="display: none;">
-                <div style="background: white; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto;">
-                    <h3 style="color: #2d3748; margin-bottom: 20px;">Active Sessions</h3>
-                    <div id="sessionsListContent"></div>
-                    <button class="btn btn-primary" onclick="goHome()" style="width: 100%; margin-top: 15px;">Back</button>
-                </div>
+    <!-- Browse Sessions Modal -->
+    <div class="modal" id="sessionsModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('sessionsModal')">✕</button>
+            <h3 style="color: #2d3748;">Active Sessions</h3>
+            <div id="sessionsListContent" style="margin-top: 20px; margin-bottom: 20px;"></div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="closeModal('sessionsModal')">Close</button>
+                <button class="btn btn-danger" style="flex: 1;" onclick="deleteAllSessions()">Delete All</button>
             </div>
+        </div>
+    </div>
         </div>
 
         <!-- Session View -->
@@ -1299,12 +1304,21 @@
                 }).join('');
             }
 
-            document.getElementById('sessionsList').style.display = 'block';
+            document.getElementById('sessionsModal').classList.add('active');
         }
 
         function fillSessionCode(code) {
             document.getElementById('sessionCodeInput').value = code;
             document.getElementById('joinSessionModal').classList.add('active');
+        }
+
+        async function deleteAllSessions() {
+            if (confirm('Are you sure you want to delete ALL active sessions? This cannot be undone.')) {
+                allSessions = allSessions.filter(s => s.status === 'closed');
+                await saveData();
+                showToast('All active sessions deleted');
+                closeModal('sessionsModal');
+            }
         }
 
         function goHome() {
