@@ -1285,15 +1285,18 @@
             if (activeSessions.length === 0) {
                 content.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No active sessions</p>';
             } else {
-                content.innerHTML = activeSessions.map(s => `
-                    <div class="card" style="margin-bottom: 10px;">
-                        <strong>${s.name}</strong>
-                        <p style="font-size: 12px; color: #718096; margin: 8px 0;">
-                            Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${s.stories.length} stor${s.stories.length !== 1 ? 'ies' : 'y'}
-                        </p>
-                        <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="fillSessionCode('${s.code}')">Join</button>
-                    </div>
-                `).join('');
+                content.innerHTML = activeSessions.map(s => {
+                    const storyCount = (s.stories || []).length;
+                    return `
+                        <div class="card" style="margin-bottom: 10px;">
+                            <strong>${s.name}</strong>
+                            <p style="font-size: 12px; color: #718096; margin: 8px 0;">
+                                Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}
+                            </p>
+                            <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="fillSessionCode('${s.code}')">Join</button>
+                        </div>
+                    `;
+                }).join('');
             }
 
             document.getElementById('sessionsList').style.display = 'block';
