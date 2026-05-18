@@ -560,11 +560,12 @@
                     <h2 id="sessionTitle"></h2>
                     <p id="sessionStats" style="color: #718096; margin-top: 5px;"></p>
                 </div>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <button class="btn btn-primary" style="background: #718096;" onclick="goHome()">← Back to Home</button>
                     <button class="btn btn-primary" id="shareSessionBtn" style="display: none;" onclick="copySessionLink()">📋 Share Link</button>
                     <button class="btn btn-success" id="startSessionBtn" style="display: none;" onclick="startSession()">Start Session</button>
                     <button class="btn btn-danger" id="closeSessionBtn" style="display: none;" onclick="closeSession()">Close Session</button>
+                    <button class="btn btn-danger" id="deleteSessionBtn" style="display: none;" onclick="deleteCurrentSession()">🗑️ Delete Session</button>
                 </div>
             </div>
 
@@ -1097,14 +1098,17 @@
             const startSessionBtn = document.getElementById('startSessionBtn');
             const shareSessionBtn = document.getElementById('shareSessionBtn');
             const closeSessionBtn = document.getElementById('closeSessionBtn');
+            const deleteSessionBtn = document.getElementById('deleteSessionBtn');
             if (currentRole === 'facilitator') {
                 startSessionBtn.style.display = session.status === 'pending' ? 'block' : 'none';
                 shareSessionBtn.style.display = 'block';
                 closeSessionBtn.style.display = 'block';
+                deleteSessionBtn.style.display = 'block';
             } else {
                 startSessionBtn.style.display = 'none';
                 shareSessionBtn.style.display = 'none';
                 closeSessionBtn.style.display = 'none';
+                deleteSessionBtn.style.display = 'none';
             }
 
             renderParticipants(session.participants);
@@ -1563,8 +1567,6 @@
                     const isReturningUser = storedUserId && s.participants.some(p => p.id === storedUserId);
                     const buttonText = isReturningUser ? 'Re-Join' : 'Join';
                     const buttonAction = isReturningUser ? `directRejoin('${s.code}')` : `fillSessionCode('${s.code}')`;
-                    const deleteButton = currentRole === 'facilitator' ?
-                        `<button class="btn btn-danger" style="width: 100%; margin-top: 5px;" onclick="deleteSession('${s.id}')">Delete</button>` : '';
 
                     return `
                         <div class="card" style="margin-bottom: 10px;">
@@ -1573,7 +1575,6 @@
                                 Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}
                             </p>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="${buttonAction}">${buttonText}</button>
-                            ${deleteButton}
                         </div>
                     `;
                 }).join('');
@@ -1597,6 +1598,8 @@
                     const storyCount = (s.stories || []).length;
                     const completedStories = (s.stories || []).filter(st => st.estimate).length;
                     const createdDate = new Date(s.createdAt).toLocaleDateString();
+                    const deleteButton = currentRole === 'facilitator' ?
+                        `<button class="btn btn-danger" style="width: 100%; margin-top: 5px;" onclick="deleteSession('${s.id}')">Delete</button>` : '';
 
                     return `
                         <div class="card" style="margin-bottom: 10px;">
@@ -1605,6 +1608,7 @@
                                 Created: ${createdDate} | ${s.participants.length} participant(s) | ${completedStories}/${storyCount} stories estimated
                             </p>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="viewPastSessionDetails('${s.id}')">View Details</button>
+                            ${deleteButton}
                         </div>
                     `;
                 }).join('');
@@ -1633,14 +1637,32 @@
             if (!session.stories || session.stories.length === 0) {
                 detailsHtml += '<p style="color: #718096;">No stories in this session</p>';
             } else {
-                detailsHtml += session.stories.map(story => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #e2e8f0;">
-                        <span style="color: #2d3748; flex: 1; font-weight: 500;">${story.title}</span>
-                        <span style="background: ${story.estimate ? '#c6f6d5' : '#feebc8'}; color: ${story.estimate ? '#22543d' : '#c05621'}; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 12px;">
-                            ${story.estimate || 'Pending'}
-                        </span>
-                    </div>
-                `).join('');
+                detailsHtml += session.stories.map(story => {
+                    const questions = story.questions || [];
+                    const questionsHtml = questions.length > 0 ? `
+                        <div style="background: white; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 3px solid #0066b2;">
+                            <p style="font-size: 11px; color: #718096; margin: 0 0 8px 0; font-weight: 600;">Questions & Discussion:</p>
+                            ${questions.map(q => `
+                                <div style="font-size: 12px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+                                    <p style="margin: 0 0 4px 0; color: #2d3748; font-weight: 500;">${q.authorName}</p>
+                                    <p style="margin: 0; color: #4a5568;">${q.text}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '';
+
+                    return `
+                        <div style="padding: 12px 0; border-bottom: 1px solid #e2e8f0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="color: #2d3748; font-weight: 600;">${story.title}</span>
+                                <span style="background: ${story.estimate ? '#c6f6d5' : '#feebc8'}; color: ${story.estimate ? '#22543d' : '#c05621'}; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 12px;">
+                                    ${story.estimate || 'Pending'}
+                                </span>
+                            </div>
+                            ${questionsHtml}
+                        </div>
+                    `;
+                }).join('');
             }
 
             detailsHtml += '</div>';
@@ -1723,6 +1745,22 @@
                 await saveData();
                 showToast('Session deleted');
                 loadSessions();
+            }
+        }
+
+        async function deleteCurrentSession() {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can delete sessions', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session) return;
+
+            if (confirm(`Delete session "${session.name}"? This cannot be undone.`)) {
+                allSessions = allSessions.filter(s => s.id !== currentSessionId);
+                await saveData();
+                showToast('Session deleted');
+                goHome();
             }
         }
 
