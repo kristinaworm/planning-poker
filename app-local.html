@@ -347,9 +347,8 @@
         }
 
         .story-item.drag-over {
-            border-color: #0066b2;
-            background: #f0f5fb;
-            border-width: 2px;
+            border-top: 3px solid #0066b2;
+            padding-top: 12px;
         }
 
         .story-title {
@@ -1452,17 +1451,6 @@
                 // Determine if this user can vote (only on current voting story that hasn't finished)
                 const canVote = currentRole === 'participant' && !story.finished && isCurrentVotingStory;
 
-                // Show info message if viewing a previous story's results
-                let infoHtml = '';
-                if (story.finished && !isCurrentVotingStory) {
-                    infoHtml = `
-                        <div style="background: #dbeafe; border: 2px solid #0066b2; border-radius: 6px; padding: 12px; margin-bottom: 15px; color: #1e40af;">
-                            <strong>📊 Viewing Previous Results</strong><br>
-                            <span style="font-size: 14px;">This story's voting has been completed. See the results below.</span>
-                        </div>
-                    `;
-                }
-
                 // Timer and finish button - only for facilitators during active voting
                 if (currentRole === 'facilitator' && !story.finished) {
                     timerSection.style.display = 'block';
@@ -1489,15 +1477,8 @@
                     document.getElementById('voteCards').innerHTML = '';
                 }
 
-                // Show vote summary for all roles
+                // Show vote summary for all roles (includes info banner if viewing previous results)
                 renderVotes(story);
-
-                // Prepend info message if viewing previous results
-                if (infoHtml) {
-                    const votesDisplayElement = document.getElementById('votesDisplay');
-                    const currentContent = votesDisplayElement.innerHTML;
-                    votesDisplayElement.innerHTML = infoHtml + currentContent;
-                }
             }
         }
 
@@ -1561,6 +1542,10 @@
         function renderVotes(story) {
             const session = allSessions.find(s => s.id === currentSessionId);
             const votes = story.votes || {};
+            const isCurrentVotingStory = !session.currentStoryId || session.currentStoryId === story.id;
+
+            // Check if viewing previous results
+            const showingPreviousResults = story.finished && !isCurrentVotingStory;
 
             // During voting:
             // - Participants only see their own vote (to prevent bias)
@@ -1571,25 +1556,39 @@
                 displayVotes = currentUserId in votes ? { [currentUserId]: votes[currentUserId] } : {};
             }
 
-            const voteList = Object.entries(displayVotes).map(([userId, value]) => {
-                const participant = session.participants.find(p => p.id === userId);
-                const isOwnVote = userId === currentUserId;
-                return `
-                    <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-                        <span>${isOwnVote ? 'Your vote' : (participant?.name || 'Unknown')}</span>
-                        <span style="background: #0066b2; color: white; padding: 4px 12px; border-radius: 4px;">${value}</span>
-                    </div>
-                `;
-            }).join('');
-
+            let votesHtml = '';
             if (Object.keys(displayVotes).length > 0) {
-                document.getElementById('votesDisplay').innerHTML = `
+                const voteList = Object.entries(displayVotes).map(([userId, value]) => {
+                    const participant = session.participants.find(p => p.id === userId);
+                    const isOwnVote = userId === currentUserId;
+                    return `
+                        <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
+                            <span>${isOwnVote ? 'Your vote' : (participant?.name || 'Unknown')}</span>
+                            <span style="background: #0066b2; color: white; padding: 4px 12px; border-radius: 4px;">${value}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                votesHtml = `
                     <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-top: 20px;">
                         <h4 style="margin-bottom: 15px; color: #2d3748;">Votes (${Object.keys(votes).length})</h4>
                         ${voteList}
                     </div>
                 `;
             }
+
+            // Add info banner if viewing previous results
+            if (showingPreviousResults) {
+                const infoBanner = `
+                    <div style="background: #dbeafe; border: 2px solid #0066b2; border-radius: 6px; padding: 12px; margin-bottom: 15px; color: #1e40af;">
+                        <strong>📊 Viewing Previous Results</strong><br>
+                        <span style="font-size: 14px;">This story's voting has been completed. See the results below.</span>
+                    </div>
+                `;
+                votesHtml = infoBanner + votesHtml;
+            }
+
+            document.getElementById('votesDisplay').innerHTML = votesHtml;
         }
 
 
@@ -1780,7 +1779,10 @@
             const questionsList = document.getElementById('questionsList');
 
             if (questions.length === 0) {
-                questionsList.innerHTML = '<p style="color: #718096; text-align: center; padding: 20px;">No questions yet. Be the first to ask!</p>';
+                const emptyMessage = currentRole === 'observer'
+                    ? 'No questions yet'
+                    : 'No questions yet. Be the first to ask!';
+                questionsList.innerHTML = `<p style="color: #718096; text-align: center; padding: 20px;">${emptyMessage}</p>`;
                 return;
             }
 
