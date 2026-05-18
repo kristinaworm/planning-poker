@@ -902,7 +902,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.5'; // Updated 2026-05-18: Fixed story reset not refreshing participant UI
+        const APP_VERSION = '1.0.6'; // Updated 2026-05-18: Fixed voting completion banner not showing for participants
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1018,11 +1018,13 @@
                         if (currentSelectedStoryId) {
                             const currentStory = session.stories.find(s => s.id === currentSelectedStoryId);
                             if (currentStory) {
-                                // Check if story state has changed significantly (e.g., was reset)
+                                // Check if story state has changed significantly (reset or voting complete)
                                 const prevState = previousStoryState[currentSelectedStoryId];
-                                const stateChanged = prevState && prevState.finished && !currentStory.finished;
+                                const wasReset = prevState && prevState.finished && !currentStory.finished;
+                                const votingJustFinished = prevState && !prevState.finished && currentStory.finished;
+                                const stateChanged = wasReset || votingJustFinished;
 
-                                // If story was reset (finished -> not finished), re-render entire voting area
+                                // If story was reset or voting just finished, re-render entire voting area
                                 if (stateChanged) {
                                     previousStoryState[currentSelectedStoryId] = {
                                         finished: currentStory.finished,
