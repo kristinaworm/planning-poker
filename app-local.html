@@ -579,7 +579,7 @@
                 </div>
 
                 <div class="main-content">
-                    <h3 style="color: #2d3748; margin-bottom: 15px;">Stories</h3>
+                    <h3 id="storiesHeader" style="color: #2d3748; margin-bottom: 15px;">Stories</h3>
                     <div id="storiesList"></div>
                 </div>
 
@@ -1189,6 +1189,11 @@
 
         function renderStories(stories) {
             const list = document.getElementById('storiesList');
+            const header = document.getElementById('storiesHeader');
+            if (header) {
+                header.textContent = `Stories (${stories.length})`;
+            }
+
             if (stories.length === 0) {
                 list.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No stories yet</p>';
                 return;
@@ -1507,6 +1512,23 @@
             showToast('Question posted!');
         }
 
+        async function deleteQuestion(storyId, questionId) {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can delete questions', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+            if (!story) return;
+
+            if (confirm('Delete this question?')) {
+                story.questions = (story.questions || []).filter(q => q.id !== questionId);
+                await saveData();
+                renderQuestions(story);
+                showToast('Question deleted');
+            }
+        }
+
         function renderQuestions(story) {
             const questions = story.questions || [];
             const questionsList = document.getElementById('questionsList');
@@ -1519,11 +1541,17 @@
             questionsList.innerHTML = questions.map(q => {
                 const date = new Date(q.timestamp);
                 const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const deleteBtn = currentRole === 'facilitator' ?
+                    `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="deleteQuestion('${story.id}', '${q.id}'); event.stopPropagation();">✕</button>` : '';
+
                 return `
                     <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #0066b2;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="font-weight: 600; color: #2d3748;">${q.authorName}</span>
-                            <span style="color: #a0aec0; font-size: 12px;">${timeStr}</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="color: #a0aec0; font-size: 12px;">${timeStr}</span>
+                                ${deleteBtn}
+                            </div>
                         </div>
                         <p style="color: #4a5568; margin: 0;">${q.text}</p>
                     </div>
@@ -1798,6 +1826,11 @@
 
         function renderPastStories(stories) {
             const list = document.getElementById('storiesList');
+            const header = document.getElementById('storiesHeader');
+            if (header) {
+                header.textContent = `Stories (${stories.length})`;
+            }
+
             if (stories.length === 0) {
                 list.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No stories in this session</p>';
                 return;
