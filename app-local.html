@@ -1017,6 +1017,14 @@
                                 renderQuestions(currentStory);
                                 renderVotes(currentStory);
 
+                                // Re-render vote cards for participants when voting starts
+                                if (currentRole === 'participant' && !currentStory.finished) {
+                                    const isCurrentVotingStory = !session.currentStoryId || session.currentStoryId === currentSelectedStoryId;
+                                    if (isCurrentVotingStory && currentStory.votingStarted) {
+                                        renderVoteCards(currentStory);
+                                    }
+                                }
+
                                 // Update timer display if timer is running
                                 if (currentStory.timerStartedAt && !currentStory.finished) {
                                     updateTimerDisplay(currentStory);
