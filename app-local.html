@@ -560,12 +560,12 @@
                     <h2 id="sessionTitle"></h2>
                     <p id="sessionStats" style="color: #718096; margin-top: 5px;"></p>
                 </div>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" style="background: #718096;" onclick="goHome()">← Back to Home</button>
-                    <button class="btn btn-primary" id="shareSessionBtn" style="display: none;" onclick="copySessionLink()">📋 Share Link</button>
-                    <button class="btn btn-success" id="startSessionBtn" style="display: none;" onclick="startSession()">Start Session</button>
-                    <button class="btn btn-danger" id="closeSessionBtn" style="display: none;" onclick="closeSession()">Close Session</button>
-                    <button class="btn btn-danger" id="deleteSessionBtn" style="display: none;" onclick="deleteCurrentSession()">🗑️ Delete Session</button>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" style="background: #718096; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="goHome()">← Back</button>
+                    <button class="btn btn-primary" id="shareSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="copySessionLink()">📋 Share</button>
+                    <button class="btn btn-success" id="startSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="startSession()">Start</button>
+                    <button class="btn btn-danger" id="closeSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="closeSession()">Close</button>
+                    <button class="btn btn-danger" id="deleteSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="deleteCurrentSession()">🗑️ Delete</button>
                 </div>
             </div>
 
@@ -575,7 +575,7 @@
                         <h3>Participants</h3>
                         <div class="participant-list" id="participantsList"></div>
                     </div>
-                    <button class="btn btn-success" style="width: 100%;" onclick="showAddStoryForm()">+ Add Story</button>
+                    <button class="btn btn-success" id="addStoryBtn" style="width: 100%;" onclick="showAddStoryForm()">+ Add Story</button>
                 </div>
 
                 <div class="main-content">
@@ -1617,64 +1617,80 @@
             document.getElementById('pastSessionsModal').classList.add('active');
         }
 
-        function viewPastSessionDetails(sessionId) {
+        async function viewPastSessionDetails(sessionId) {
             const session = allSessions.find(s => s.id === sessionId);
             if (!session) return;
 
-            document.getElementById('detailsSessionTitle').textContent = session.name;
+            // Load past session into full view
+            currentSessionId = sessionId;
+            currentRole = 'viewer'; // Set to viewer (read-only) for past sessions
 
-            let detailsHtml = `
-                <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                    <p style="color: #718096; font-size: 12px; margin-bottom: 10px;">
-                        Created: ${new Date(session.createdAt).toLocaleString()} | ${session.participants.length} participants
-                    </p>
-                </div>
-
-                <div style="background: #f7fafc; padding: 15px; border-radius: 6px;">
-                    <h4 style="color: #2d3748; margin-bottom: 15px;">Stories & Estimates</h4>
-            `;
-
-            if (!session.stories || session.stories.length === 0) {
-                detailsHtml += '<p style="color: #718096;">No stories in this session</p>';
-            } else {
-                detailsHtml += session.stories.map(story => {
-                    const questions = story.questions || [];
-                    const questionsHtml = questions.length > 0 ? `
-                        <div style="background: white; padding: 10px; border-radius: 4px; margin-top: 10px; border-left: 3px solid #0066b2;">
-                            <p style="font-size: 11px; color: #718096; margin: 0 0 8px 0; font-weight: 600;">Questions & Discussion:</p>
-                            ${questions.map(q => `
-                                <div style="font-size: 12px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-                                    <p style="margin: 0 0 4px 0; color: #2d3748; font-weight: 500;">${q.authorName}</p>
-                                    <p style="margin: 0; color: #4a5568;">${q.text}</p>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : '';
-
-                    return `
-                        <div style="padding: 12px 0; border-bottom: 1px solid #e2e8f0;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="color: #2d3748; font-weight: 600;">${story.title}</span>
-                                <span style="background: ${story.estimate ? '#c6f6d5' : '#feebc8'}; color: ${story.estimate ? '#22543d' : '#c05621'}; padding: 6px 12px; border-radius: 4px; font-weight: 600; font-size: 12px;">
-                                    ${story.estimate || 'Pending'}
-                                </span>
-                            </div>
-                            ${questionsHtml}
-                        </div>
-                    `;
-                }).join('');
-            }
-
-            detailsHtml += '</div>';
-
-            document.getElementById('pastSessionDetails').innerHTML = detailsHtml;
             closeModal('pastSessionsModal');
-            document.getElementById('pastSessionDetailsModal').classList.add('active');
+            document.querySelector('.home-view').classList.remove('active');
+            document.querySelector('.session-view').classList.add('active');
+
+            renderPastSession(sessionId);
         }
 
-        function goBackToPastSessions() {
-            closeModal('pastSessionDetailsModal');
-            loadPastSessions();
+        function renderPastSession(sessionId) {
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            document.getElementById('sessionTitle').textContent = session.name + ' (Completed)';
+            document.getElementById('sessionStats').textContent =
+                `Created: ${new Date(session.createdAt).toLocaleString()} | ${session.participants.length} participant(s) | ${(session.stories || []).length} stor${(session.stories || []).length !== 1 ? 'ies' : 'y'}`;
+
+            // Show only back home, share link, and delete for facilitators
+            const shareSessionBtn = document.getElementById('shareSessionBtn');
+            const deleteSessionBtn = document.getElementById('deleteSessionBtn');
+            const startSessionBtn = document.getElementById('startSessionBtn');
+            const closeSessionBtn = document.getElementById('closeSessionBtn');
+            const addStoryBtn = document.getElementById('addStoryBtn');
+
+            // Hide all session control buttons
+            startSessionBtn.style.display = 'none';
+            closeSessionBtn.style.display = 'none';
+            addStoryBtn.style.display = 'none';
+
+            // Show share and delete for facilitators
+            shareSessionBtn.style.display = currentRole === 'facilitator' ? 'block' : 'none';
+            deleteSessionBtn.style.display = currentRole === 'facilitator' ? 'block' : 'none';
+
+            renderParticipants(session.participants);
+            renderPastStories(session.stories || []);
+        }
+
+        function renderPastStories(stories) {
+            const list = document.getElementById('storiesList');
+            if (stories.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No stories in this session</p>';
+                return;
+            }
+
+            list.innerHTML = stories.map(story => {
+                const questions = story.questions || [];
+                const questionsHtml = questions.length > 0 ? `
+                    <div style="background: white; padding: 10px; border-radius: 4px; margin-top: 8px; border-left: 3px solid #0066b2;">
+                        <p style="font-size: 11px; color: #718096; margin: 0 0 8px 0; font-weight: 600;">Questions & Discussion:</p>
+                        ${questions.map(q => `
+                            <div style="font-size: 12px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
+                                <p style="margin: 0 0 3px 0; color: #2d3748; font-weight: 500;">${q.authorName}</p>
+                                <p style="margin: 0; color: #4a5568;">${q.text}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="story-item" style="cursor: default;">
+                        <div class="story-title" style="font-weight: 600;">${story.title}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                            <span style="background: #c6f6d5; color: #22543d; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✓ Estimate: ${story.estimate}</span>
+                        </div>
+                        ${questionsHtml}
+                    </div>
+                `;
+            }).join('');
         }
 
         function fillSessionCode(code) {
