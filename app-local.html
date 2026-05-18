@@ -1624,20 +1624,11 @@
             // Load past session into full view
             currentSessionId = sessionId;
 
-            // Check if current user is a facilitator in this session by checking all session codes we have stored
-            let userRole = 'viewer';
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key.startsWith('user_')) {
-                    const storedUserId = localStorage.getItem(key);
-                    const participant = session.participants.find(p => p.id === storedUserId);
-                    if (participant && participant.role === 'facilitator') {
-                        userRole = 'facilitator';
-                        break;
-                    }
-                }
-            }
-            currentRole = userRole;
+            // Check if any facilitator exists in this session's participants
+            // If yes, assume user might be that facilitator and show delete option
+            // (safety check happens in deleteCurrentSession function)
+            const hasFacilitator = session.participants && session.participants.some(p => p.role === 'facilitator');
+            currentRole = hasFacilitator ? 'facilitator' : 'viewer';
 
             closeModal('pastSessionsModal');
             document.querySelector('.home-view').classList.remove('active');
@@ -1685,29 +1676,49 @@
             }
 
             list.innerHTML = stories.map(story => {
-                const questions = story.questions || [];
-                const questionsHtml = questions.length > 0 ? `
-                    <div style="background: white; padding: 10px; border-radius: 4px; margin-top: 8px; border-left: 3px solid #0066b2;">
-                        <p style="font-size: 11px; color: #718096; margin: 0 0 8px 0; font-weight: 600;">Questions & Discussion:</p>
-                        ${questions.map(q => `
-                            <div style="font-size: 12px; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;">
-                                <p style="margin: 0 0 3px 0; color: #2d3748; font-weight: 500;">${q.authorName}</p>
-                                <p style="margin: 0; color: #4a5568;">${q.text}</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : '';
-
                 return `
-                    <div class="story-item" style="cursor: default;">
-                        <div class="story-title" style="font-weight: 600;">${story.title}</div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
-                            <span style="background: #c6f6d5; color: #22543d; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">✓ Estimate: ${story.estimate}</span>
-                        </div>
-                        ${questionsHtml}
+                    <div class="story-item" onclick="selectPastStory('${story.id}')">
+                        <div class="story-title">${story.title}</div>
+                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${story.estimate}</span>
                     </div>
                 `;
             }).join('');
+        }
+
+        function selectPastStory(storyId) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+            if (!story) return;
+
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('votingArea').style.display = 'none';
+            document.getElementById('questionsSection').style.display = 'block';
+
+            // Show story details and questions
+            const questions = story.questions || [];
+            let detailsHtml = `
+                <h3 style="color: #2d3748; margin-bottom: 10px;">${story.title}</h3>
+                <div style="background: #c6f6d5; color: #22543d; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600;">
+                    Final Estimate: ${story.estimate}
+                </div>
+            `;
+
+            if (questions.length === 0) {
+                detailsHtml += '<p style="color: #718096; text-align: center; padding: 20px;">No questions asked about this story</p>';
+            } else {
+                detailsHtml += '<h4 style="color: #2d3748; margin-bottom: 10px;">Questions & Discussion:</h4>';
+                detailsHtml += questions.map(q => `
+                    <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #0066b2;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="font-weight: 600; color: #2d3748;">${q.authorName}</span>
+                            <span style="color: #a0aec0; font-size: 12px;">${new Date(q.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <p style="color: #4a5568; margin: 0;">${q.text}</p>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('questionsList').innerHTML = detailsHtml;
         }
 
         function fillSessionCode(code) {
