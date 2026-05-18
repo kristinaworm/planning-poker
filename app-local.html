@@ -470,7 +470,7 @@
             <div class="form-group" style="position: relative; margin-bottom: 20px;">
                 <input type="password" id="passwordInput" placeholder="Enter password" style="margin-bottom: 0; padding-right: 45px;">
                 <button type="button" onclick="togglePasswordVisibility()" style="position: absolute; right: 12px; top: 12px; background: none; border: none; cursor: pointer; font-size: 18px; color: #718096; padding: 0;">
-                    <span id="toggleIcon">👁️</span>
+                    <span id="toggleIcon">🙈</span>
                 </button>
             </div>
             <button class="btn btn-primary" style="width: 100%;" onclick="checkPassword()">Access</button>
@@ -770,10 +770,10 @@
             const icon = document.getElementById('toggleIcon');
             if (input.type === 'password') {
                 input.type = 'text';
-                icon.textContent = '🙈';
+                icon.textContent = '🐵';
             } else {
                 input.type = 'password';
-                icon.textContent = '👁️';
+                icon.textContent = '🙈';
             }
         }
 
