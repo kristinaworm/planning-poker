@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sleep Number Planning Poker</title>
+    <title>Planning Poker</title>
     <style>
         * {
             margin: 0;
@@ -373,8 +373,11 @@
         <div class="modal-content" style="max-width: 400px;">
             <h3 style="color: #2d3748; margin-bottom: 20px;">Planning Poker Access</h3>
             <p style="color: #718096; margin-bottom: 20px;">Enter the password to access this session:</p>
-            <div class="form-group">
-                <input type="password" id="passwordInput" placeholder="Enter password" style="margin-bottom: 0;">
+            <div class="form-group" style="position: relative; margin-bottom: 20px;">
+                <input type="password" id="passwordInput" placeholder="Enter password" style="margin-bottom: 0; padding-right: 45px;">
+                <button type="button" onclick="togglePasswordVisibility()" style="position: absolute; right: 12px; top: 12px; background: none; border: none; cursor: pointer; font-size: 18px; color: #718096; padding: 0;">
+                    <span id="toggleIcon">👁️</span>
+                </button>
             </div>
             <button class="btn btn-primary" style="width: 100%;" onclick="checkPassword()">Access</button>
         </div>
@@ -382,14 +385,14 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <nav>
-            <h1>😴 Sleep Number Planning Poker</h1>
+            <h1>🎯 Planning Poker</h1>
         </nav>
 
         <!-- Home View -->
         <div class="home-view active">
             <div class="hero">
-                <h2>Sleep Number Planning Poker</h2>
-                <p>Estimate user stories and features efficiently with your team in real-time</p>
+                <h2>Planning Poker</h2>
+                <p>Estimate user stories and features efficiently with your team</p>
             </div>
 
             <div class="card-grid">
@@ -597,6 +600,18 @@
             } else {
                 showToast('Incorrect password', 'error');
                 document.getElementById('passwordInput').value = '';
+            }
+        }
+
+        function togglePasswordVisibility() {
+            const input = document.getElementById('passwordInput');
+            const icon = document.getElementById('toggleIcon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                icon.textContent = '👁️';
             }
         }
 
@@ -1323,9 +1338,9 @@
         (async () => {
             await loadData();
             if (useFirebase) {
-                console.log('✓ Using Firebase for real-time multi-user collaboration');
+                console.log('✓ Planning Poker: Firebase enabled for multi-user collaboration');
             } else {
-                console.log('⚠ Using localStorage (local only)');
+                console.log('⚠ Planning Poker: Using local storage (single machine only)');
                 showToast('Using local storage - changes not synced to Firebase', 'error');
             }
         })();
