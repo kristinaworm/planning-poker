@@ -902,7 +902,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.2'; // Updated 2026-05-18: All QA bugs fixed (localStorage backup, deleted story reference, reset story)
+        const APP_VERSION = '1.0.4'; // Updated 2026-05-18: Fixed all race conditions with auto-refresh
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1254,10 +1254,16 @@
             if (!participant) return;
 
             if (confirm(`Remove ${participant.name} from the session?`)) {
+                // Pause auto-refresh to avoid race condition
+                stopAutoRefresh();
+
                 session.participants = session.participants.filter(p => p.id !== participantId);
                 await saveData();
                 renderParticipants(session.participants);
                 showToast(`${participant.name} removed from session`);
+
+                // Resume auto-refresh
+                startAutoRefresh();
             }
         }
 
@@ -1660,12 +1666,18 @@
                 return;
             }
 
+            // Pause auto-refresh to avoid race condition
+            stopAutoRefresh();
+
             if (!story.votes) story.votes = {};
             story.votes[currentUserId] = value;
             await saveData();
 
             renderVoteCards(story);
             renderVotes(story);
+
+            // Resume auto-refresh
+            startAutoRefresh();
         }
 
         function renderVotes(story) {
@@ -1724,21 +1736,27 @@
         async function finishVoting() {
             stopTimer(); // Stop the timer if running
 
+            // Pause auto-refresh to avoid race condition
+            stopAutoRefresh();
+
             const session = allSessions.find(s => s.id === currentSessionId);
             if (!session || !currentSelectedStoryId) {
                 showToast('No story selected', 'error');
+                startAutoRefresh();
                 return;
             }
 
             const story = session.stories.find(s => s.id === currentSelectedStoryId);
             if (!story) {
                 showToast('Story not found', 'error');
+                startAutoRefresh();
                 return;
             }
 
             const votes = Object.values(story.votes || {});
             if (votes.length === 0) {
                 showToast('Need at least one vote', 'error');
+                startAutoRefresh();
                 return;
             }
 
@@ -1778,6 +1796,9 @@
             await loadData();
             const updatedSession = allSessions.find(s => s.id === currentSessionId);
             renderStories(updatedSession.stories);
+
+            // Resume auto-refresh
+            startAutoRefresh();
         }
 
         let currentSelectedStoryId = null;
@@ -1880,6 +1901,9 @@
                 return;
             }
 
+            // Pause auto-refresh to avoid race condition
+            stopAutoRefresh();
+
             if (!story.questions) story.questions = [];
 
             const question = {
@@ -1896,6 +1920,9 @@
             document.getElementById('questionInput').value = '';
             renderQuestions(story);
             showToast('Question posted!');
+
+            // Resume auto-refresh
+            startAutoRefresh();
         }
 
         async function deleteQuestion(storyId, questionId) {
@@ -1908,10 +1935,16 @@
             if (!story) return;
 
             if (confirm('Delete this question?')) {
+                // Pause auto-refresh to avoid race condition
+                stopAutoRefresh();
+
                 story.questions = (story.questions || []).filter(q => q.id !== questionId);
                 await saveData();
                 renderQuestions(story);
                 showToast('Question deleted');
+
+                // Resume auto-refresh
+                startAutoRefresh();
             }
         }
 
@@ -1995,12 +2028,18 @@
                 story.jiraLink = jiraLink;
             }
 
+            // Pause auto-refresh to avoid race condition
+            stopAutoRefresh();
+
             session.stories.push(story);
 
             await saveData();
             closeModal('addStoryModal');
             renderStories(session.stories);
             showToast('Story added!');
+
+            // Resume auto-refresh
+            startAutoRefresh();
         }
 
         let editingStoryId = null;
@@ -2034,6 +2073,9 @@
                 return;
             }
 
+            // Pause auto-refresh to avoid race condition
+            stopAutoRefresh();
+
             story.title = title;
             if (jiraLink) {
                 story.jiraLink = jiraLink;
@@ -2046,6 +2088,9 @@
             renderStories(session.stories);
             editingStoryId = null;
             showToast('Story updated!');
+
+            // Resume auto-refresh
+            startAutoRefresh();
         }
 
         async function deleteStory(storyId) {
@@ -2058,6 +2103,9 @@
             if (!story) return;
 
             if (confirm(`Delete story "${story.title}"?`)) {
+                // Pause auto-refresh to avoid race condition
+                stopAutoRefresh();
+
                 session.stories = session.stories.filter(s => s.id !== storyId);
 
                 // Clear currentStoryId if the deleted story was the current voting story
@@ -2070,6 +2118,9 @@
                 await saveData();
                 renderStories(session.stories);
                 showToast('Story deleted!');
+
+                // Resume auto-refresh
+                startAutoRefresh();
             }
         }
 
@@ -2083,15 +2134,26 @@
             if (!story) return;
 
             if (confirm(`Reset votes for "${story.title}"? This will clear all votes and allow re-voting.`)) {
+                // Pause auto-refresh temporarily to avoid race condition
+                stopAutoRefresh();
+
                 story.votes = {};
                 story.estimate = null;
                 story.finished = false;
                 story.votingStarted = false;
                 story.timerStartedAt = null;
                 await saveData();
+
+                // Reload data to ensure consistency
+                await loadData();
+
                 selectStory(storyId);
-                renderStories(session.stories);
+                const updatedSession = allSessions.find(s => s.id === currentSessionId);
+                renderStories(updatedSession.stories);
                 showToast('Story reset! Ready for re-voting.');
+
+                // Resume auto-refresh
+                startAutoRefresh();
             }
         }
 
