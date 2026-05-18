@@ -308,6 +308,8 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
         }
 
         .story-item {
@@ -327,6 +329,27 @@
         .story-item.active {
             border-color: #0066b2;
             background: #e6f0fa;
+        }
+
+        .story-item.current-voting {
+            border-color: #48bb78;
+            border-width: 3px;
+            background: #f0fdf4;
+        }
+
+        .story-item.draggable {
+            cursor: move;
+        }
+
+        .story-item.dragging {
+            opacity: 0.5;
+            background: #f7fafc;
+        }
+
+        .story-item.drag-over {
+            border-color: #0066b2;
+            background: #f0f5fb;
+            border-width: 2px;
         }
 
         .story-title {
@@ -597,7 +620,7 @@
                             <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" id="startTimerBtn" onclick="startTimer()">Start Timer</button>
                         </div>
 
-                        <p style="margin-bottom: 15px; color: #718096; font-size: 14px;">
+                        <p id="selectEstimateText" style="margin-bottom: 15px; color: #718096; font-size: 14px; display: none;">
                             Select your estimate:
                         </p>
 
@@ -938,12 +961,20 @@
         // Refresh data from Firebase periodically
         function startAutoRefresh() {
             if (refreshInterval) clearInterval(refreshInterval);
-            refreshInterval = setInterval(() => {
+            refreshInterval = setInterval(async () => {
                 if (useFirebase && currentSessionId) {
-                    loadData();
+                    await loadData();
                     const session = allSessions.find(s => s.id === currentSessionId);
                     if (session) {
                         renderSession(currentSessionId);
+
+                        // Auto-select facilitator's story for non-facilitators
+                        if (currentRole !== 'facilitator' && session.currentStoryId && session.currentStoryId !== currentSelectedStoryId) {
+                            const currentStory = session.stories.find(s => s.id === session.currentStoryId);
+                            if (currentStory) {
+                                selectStory(session.currentStoryId);
+                            }
+                        }
                     }
                 }
             }, 2000);
@@ -1009,7 +1040,8 @@
                 createdAt: new Date().toISOString(),
                 status: 'pending',
                 participants: [{ id: userId, name: participantName, role: role }],
-                stories: []
+                stories: [],
+                currentStoryId: null
             };
 
             allSessions.push(session);
@@ -1199,7 +1231,11 @@
                 return;
             }
 
-            list.innerHTML = stories.map(story => {
+            list.innerHTML = stories.map((story, index) => {
+                const session = allSessions.find(s => s.id === currentSessionId);
+                const isCurrentVoting = session && session.currentStoryId === story.id;
+                const currentVotingClass = isCurrentVoting ? 'current-voting' : '';
+
                 const badgeClass = story.estimate ? 'background: #c6f6d5; color: #22543d;' : 'background: #feebc8; color: #c05621;';
                 const badgeText = story.estimate ? `✓ Done (${story.estimate})` : 'Pending';
 
@@ -1216,14 +1252,33 @@
                     </div>
                 ` : '';
 
+                const draggableAttr = currentRole === 'facilitator' ? 'draggable="true"' : '';
+                const draggableClass = currentRole === 'facilitator' ? 'draggable' : '';
+
                 return `
-                    <div class="story-item" onclick="selectStory('${story.id}')">
+                    <div class="story-item ${draggableClass} ${currentVotingClass}" data-story-id="${story.id}" data-story-index="${index}" ${draggableAttr}
+                         onclick="selectStory('${story.id}')"
+                         ondragstart="handleDragStart(event)"
+                         ondragover="handleDragOver(event)"
+                         ondrop="handleDragDrop(event)"
+                         ondragleave="handleDragLeave(event)"
+                         ondragend="handleDragEnd(event)">
                         <div class="story-title">${jiraDisplay}${story.title}</div>
                         <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
                         ${actionButtons}
                     </div>
                 `;
             }).join('');
+
+            // Attach drag event listeners
+            const storyItems = list.querySelectorAll('.story-item.draggable');
+            storyItems.forEach(item => {
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('drop', handleDragDrop);
+                item.addEventListener('dragleave', handleDragLeave);
+                item.addEventListener('dragend', handleDragEnd);
+            });
         }
 
         // Timer functionality
@@ -1300,25 +1355,23 @@
         }
 
         // Select story
-        function selectStory(storyId) {
+        async function selectStory(storyId) {
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session.stories.find(s => s.id === storyId);
 
-            if (currentRole === 'observer') {
-                showToast('Observers cannot vote', 'error');
-                return;
-            }
-
             // Track current selected story for questions
             currentSelectedStoryId = storyId;
+
+            // If facilitator in active session, update the story everyone should be voting on
+            if (currentRole === 'facilitator' && session.status === 'active') {
+                session.currentStoryId = storyId;
+                await saveData();
+            }
 
             // Initialize questions array if it doesn't exist
             if (!story.questions) {
                 story.questions = [];
             }
-
-            // Reset finished flag for new voting round
-            story.finished = false;
 
             // Display title with optional Jira link
             let titleDisplay = story.title;
@@ -1338,19 +1391,50 @@
                 questionSectionTitle.innerHTML = `Questions & Discussion<br><span style="font-size: 14px; color: #0066b2; font-weight: 600; margin-top: 5px; display: block;">${story.title}</span>`;
             }
 
+            // Control question form visibility based on voting status
+            const questionFormArea = document.getElementById('questionFormArea');
+            if (session.status === 'active' && story.finished) {
+                // After voting finishes, only facilitators can modify questions
+                questionFormArea.style.display = currentRole === 'facilitator' ? 'block' : 'none';
+            } else if (session.status === 'pending' || (session.status === 'active' && !story.finished)) {
+                // Before or during voting, show form for facilitators only
+                questionFormArea.style.display = currentRole === 'facilitator' ? 'block' : 'none';
+            }
+
             if (session.status === 'pending') {
                 document.getElementById('votingArea').style.display = 'none';
                 renderQuestions(story);
             } else {
+                // session.status === 'active'
                 document.getElementById('currentStoryTitle').innerHTML = titleDisplay;
                 document.getElementById('currentStoryDesc').textContent = story.description || '';
                 document.getElementById('votingArea').style.display = 'block';
                 document.getElementById('votesDisplay').innerHTML = '';
 
-                // Show timer section and finish voting button only for facilitators
                 const timerSection = document.getElementById('timerSection');
                 const finishVotingBtn = document.getElementById('finishVotingBtn');
-                if (currentRole === 'facilitator') {
+                const selectEstimateText = document.getElementById('selectEstimateText');
+
+                // Check if this is the current story being voted on
+                const isCurrentVotingStory = !session.currentStoryId || session.currentStoryId === storyId;
+
+                // Determine if this user can vote
+                const canVote = currentRole === 'participant' && !story.finished && isCurrentVotingStory;
+
+                // Show warning if not on current voting story
+                let warningHtml = '';
+                if (currentRole !== 'facilitator' && !isCurrentVotingStory) {
+                    const currentStory = session.stories.find(s => s.id === session.currentStoryId);
+                    warningHtml = `
+                        <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px; padding: 12px; margin-bottom: 15px; color: #92400e;">
+                            <strong>⏳ Story not yet selected</strong><br>
+                            <span style="font-size: 14px;">Waiting for facilitator to select "${currentStory?.title || 'next story'}" for voting</span>
+                        </div>
+                    `;
+                }
+
+                // Timer and finish button - only for facilitators during active voting
+                if (currentRole === 'facilitator' && !story.finished) {
                     timerSection.style.display = 'block';
                     finishVotingBtn.style.display = 'block';
                     document.getElementById('startTimerBtn').disabled = false;
@@ -1366,8 +1450,22 @@
                     finishVotingBtn.style.display = 'none';
                 }
 
-                renderVoteCards(story);
-                renderVotes(story);
+                // Show vote cards only for participants who can vote on current story
+                if (canVote) {
+                    selectEstimateText.style.display = 'block';
+                    renderVoteCards(story);
+                } else {
+                    selectEstimateText.style.display = 'none';
+                    document.getElementById('voteCards').innerHTML = '';
+                }
+
+                // Show warning if applicable
+                if (warningHtml) {
+                    document.getElementById('votesDisplay').innerHTML = warningHtml;
+                } else {
+                    // Show vote summary for all roles
+                    renderVotes(story);
+                }
             }
         }
 
@@ -1387,6 +1485,23 @@
                 showToast('Session has not started yet', 'error');
                 return;
             }
+
+            if (currentRole === 'facilitator') {
+                showToast('Facilitators cannot vote', 'error');
+                return;
+            }
+
+            if (currentRole === 'observer') {
+                showToast('Observers cannot vote', 'error');
+                return;
+            }
+
+            // Check if voting on the current story
+            if (session.currentStoryId && storyId !== session.currentStoryId) {
+                showToast('This story is not currently being voted on', 'error');
+                return;
+            }
+
             const story = session.stories.find(s => s.id === storyId);
 
             if (!story.votes) story.votes = {};
@@ -1458,6 +1573,13 @@
             story.finished = true;
             await saveData();
 
+            // Hide voting controls
+            document.getElementById('timerSection').style.display = 'none';
+            document.getElementById('finishVotingBtn').style.display = 'none';
+            document.getElementById('selectEstimateText').style.display = 'none';
+            document.getElementById('voteCards').innerHTML = '';
+
+            // Show votes and estimate result
             renderVotes(story);
 
             document.getElementById('estimateResult').innerHTML = `
@@ -1469,16 +1591,73 @@
 
             showToast(`Estimate: ${estimate}`);
 
-            setTimeout(() => {
-                document.getElementById('votingArea').style.display = 'none';
-                document.getElementById('emptyState').style.display = 'block';
-                document.getElementById('estimateResult').innerHTML = '';
-                document.getElementById('votesDisplay').innerHTML = '';
-                renderStories(session.stories);
-            }, 3000);
+            // Update story list to reflect estimate
+            await loadData();
+            const updatedSession = allSessions.find(s => s.id === currentSessionId);
+            renderStories(updatedSession.stories);
         }
 
         let currentSelectedStoryId = null;
+        let draggedStoryId = null;
+
+        // Drag and drop handlers
+        function handleDragStart(event) {
+            draggedStoryId = event.currentTarget.dataset.storyId;
+            event.currentTarget.classList.add('dragging');
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/html', event.currentTarget.innerHTML);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            const storyItem = event.currentTarget.closest('.story-item');
+            if (storyItem && storyItem.dataset.storyId !== draggedStoryId) {
+                storyItem.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(event) {
+            const storyItem = event.currentTarget.closest('.story-item');
+            if (storyItem) {
+                storyItem.classList.remove('drag-over');
+            }
+        }
+
+        async function handleDragDrop(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const dropTarget = event.currentTarget.closest('.story-item');
+            if (!dropTarget || dropTarget.dataset.storyId === draggedStoryId) return;
+
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session) return;
+
+            const draggedIndex = session.stories.findIndex(s => s.id === draggedStoryId);
+            const dropIndex = session.stories.findIndex(s => s.id === dropTarget.dataset.storyId);
+
+            if (draggedIndex !== -1 && dropIndex !== -1 && draggedIndex !== dropIndex) {
+                // Reorder stories
+                const draggedStory = session.stories[draggedIndex];
+                session.stories.splice(draggedIndex, 1);
+                session.stories.splice(dropIndex, 0, draggedStory);
+
+                await saveData();
+                renderStories(session.stories);
+                showToast('Story order updated');
+            }
+
+            draggedStoryId = null;
+        }
+
+        function handleDragEnd(event) {
+            event.currentTarget.classList.remove('dragging');
+            document.querySelectorAll('.story-item').forEach(item => {
+                item.classList.remove('drag-over');
+            });
+            draggedStoryId = null;
+        }
 
         // Add question for the current story
         async function addQuestion() {
@@ -1487,6 +1666,12 @@
 
             const story = session.stories.find(s => s.id === currentSelectedStoryId);
             if (!story) return;
+
+            // Check if voting is finished - only facilitators can add questions after voting
+            if (session.status === 'active' && story.finished && currentRole !== 'facilitator') {
+                showToast('Cannot add questions after voting finishes', 'error');
+                return;
+            }
 
             const questionText = document.getElementById('questionInput').value.trim();
             if (!questionText) {
