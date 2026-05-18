@@ -621,7 +621,7 @@
                     </div>
 
                     <div id="emptyState" style="text-align: center; padding: 40px 20px; color: #718096;">
-                        <p>Select a story to start voting</p>
+                        <p id="emptyStateText">Select a story to start voting</p>
                     </div>
                 </div>
             </div>
@@ -1623,7 +1623,12 @@
 
             // Load past session into full view
             currentSessionId = sessionId;
-            currentRole = 'viewer'; // Set to viewer (read-only) for past sessions
+
+            // Check if current user is a facilitator in this session
+            const storageKey = `user_${session.code}`;
+            const storedUserId = localStorage.getItem(storageKey);
+            const participant = session.participants.find(p => p.id === storedUserId);
+            currentRole = participant ? participant.role : 'viewer';
 
             closeModal('pastSessionsModal');
             document.querySelector('.home-view').classList.remove('active');
@@ -1639,6 +1644,9 @@
             document.getElementById('sessionTitle').textContent = session.name + ' (Completed)';
             document.getElementById('sessionStats').textContent =
                 `Created: ${new Date(session.createdAt).toLocaleString()} | ${session.participants.length} participant(s) | ${(session.stories || []).length} stor${(session.stories || []).length !== 1 ? 'ies' : 'y'}`;
+
+            // Update empty state message for past sessions
+            document.getElementById('emptyStateText').textContent = 'Select a story to view details';
 
             // Show only back home, share link, and delete for facilitators
             const shareSessionBtn = document.getElementById('shareSessionBtn');
