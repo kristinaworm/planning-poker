@@ -709,6 +709,27 @@
             </div>
         </div>
     </div>
+
+    <!-- Edit Story Modal -->
+    <div class="modal" id="editStoryModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('editStoryModal')">✕</button>
+            <h3 style="color: #2d3748;">Edit Story</h3>
+            <div style="margin-top: 20px;">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="editStoryTitleInput" placeholder="User can view their profile">
+                </div>
+                <div class="form-group">
+                    <label>Jira Link (optional)</label>
+                    <input type="url" id="editStoryJiraLinkInput" placeholder="https://yourjira.atlassian.net/browse/SP-123">
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="saveStoryEdit()">Save</button>
+                    <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('editStoryModal')">Cancel</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1160,10 +1181,18 @@
                     `<a href="${story.jiraLink}" target="_blank" onclick="event.stopPropagation();" style="color: #0066b2; font-size: 12px; font-weight: 600; margin-right: 8px; text-decoration: none;">🔗 ${jiraKey}</a>` :
                     '';
 
+                const actionButtons = currentRole === 'facilitator' ? `
+                    <div style="display: flex; gap: 5px; margin-top: 8px;">
+                        <button class="btn btn-primary" style="padding: 6px 10px; font-size: 12px; flex: 1;" onclick="editStory('${story.id}'); event.stopPropagation();">✏️ Edit</button>
+                        <button class="btn btn-danger" style="padding: 6px 10px; font-size: 12px; flex: 1;" onclick="deleteStory('${story.id}'); event.stopPropagation();">🗑️ Delete</button>
+                    </div>
+                ` : '';
+
                 return `
                     <div class="story-item" onclick="selectStory('${story.id}')">
                         <div class="story-title">${jiraDisplay}${story.title}</div>
                         <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
+                        ${actionButtons}
                     </div>
                 `;
             }).join('');
@@ -1531,6 +1560,68 @@
             closeModal('addStoryModal');
             renderStories(session.stories);
             showToast('Story added!');
+        }
+
+        let editingStoryId = null;
+
+        function editStory(storyId) {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can edit stories', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+            if (!story) return;
+
+            editingStoryId = storyId;
+            document.getElementById('editStoryTitleInput').value = story.title;
+            document.getElementById('editStoryJiraLinkInput').value = story.jiraLink || '';
+            document.getElementById('editStoryModal').classList.add('active');
+        }
+
+        async function saveStoryEdit() {
+            if (!editingStoryId) return;
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === editingStoryId);
+            if (!story) return;
+
+            const title = document.getElementById('editStoryTitleInput').value.trim();
+            const jiraLink = document.getElementById('editStoryJiraLinkInput').value.trim();
+
+            if (!title) {
+                showToast('Story title is required', 'error');
+                return;
+            }
+
+            story.title = title;
+            if (jiraLink) {
+                story.jiraLink = jiraLink;
+            } else {
+                delete story.jiraLink;
+            }
+
+            await saveData();
+            closeModal('editStoryModal');
+            renderStories(session.stories);
+            editingStoryId = null;
+            showToast('Story updated!');
+        }
+
+        async function deleteStory(storyId) {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can delete stories', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+            if (!story) return;
+
+            if (confirm(`Delete story "${story.title}"?`)) {
+                session.stories = session.stories.filter(s => s.id !== storyId);
+                await saveData();
+                renderStories(session.stories);
+                showToast('Story deleted!');
+            }
         }
 
         // Start session (transition from pending to active)
