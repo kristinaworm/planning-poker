@@ -611,7 +611,7 @@
 
                     <div id="questionsSection" style="display: none; margin-top: 30px;">
                         <h3 style="color: #2d3748; margin-bottom: 15px;">Questions & Discussion</h3>
-                        <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                        <div id="questionFormArea" style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
                             <div class="form-group">
                                 <textarea id="questionInput" placeholder="Ask a question or share thoughts about the stories..." style="resize: vertical; min-height: 80px;"></textarea>
                             </div>
@@ -1654,11 +1654,13 @@
             const startSessionBtn = document.getElementById('startSessionBtn');
             const closeSessionBtn = document.getElementById('closeSessionBtn');
             const addStoryBtn = document.getElementById('addStoryBtn');
+            const questionFormArea = document.getElementById('questionFormArea');
 
-            // Hide all session control buttons
+            // Hide all session control buttons and question form (read-only)
             startSessionBtn.style.display = 'none';
             closeSessionBtn.style.display = 'none';
             addStoryBtn.style.display = 'none';
+            questionFormArea.style.display = 'none';
 
             // Show share and delete for facilitators
             shareSessionBtn.style.display = currentRole === 'facilitator' ? 'block' : 'none';
