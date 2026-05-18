@@ -544,7 +544,7 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <nav>
-            <h1>🎯 Planning Poker</h1>
+            <h1>🎯 Planning Poker <span id="versionDisplay" style="font-size: 12px; color: #718096; font-weight: normal; margin-left: 10px;">v1.0</span></h1>
         </nav>
 
         <!-- Home View -->
@@ -873,6 +873,9 @@
 
         // Show password modal on load
         window.addEventListener('load', () => {
+            // Display app version
+            document.getElementById('versionDisplay').textContent = `v${APP_VERSION}`;
+
             if (!isAuthenticated) {
                 document.getElementById('passwordModal').classList.add('active');
             }
@@ -899,6 +902,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
+        const APP_VERSION = '1.0.2'; // Updated 2026-05-18: All QA bugs fixed (localStorage backup, deleted story reference, reset story)
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -991,13 +995,10 @@
             if (useFirebase) {
                 const result = await firebasePut('sessions', sessionsObj);
                 // If Firebase failed, it will have set useFirebase = false
-                // Fall through to localStorage save below
             }
 
             // Always save to localStorage as backup
-            if (!useFirebase) {
-                localStorage.setItem('planningPokerSessions', JSON.stringify(allSessions));
-            }
+            localStorage.setItem('planningPokerSessions', JSON.stringify(allSessions));
         }
 
         // Refresh data from Firebase periodically
@@ -1314,9 +1315,11 @@
                     `<a href="${story.jiraLink}" target="_blank" onclick="event.stopPropagation();" style="color: #0066b2; font-size: 12px; font-weight: 600; margin-right: 8px; text-decoration: none;">🔗 ${jiraKey}</a>` :
                     '';
 
+                const resetBtn = story.estimate ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 12px; flex: 1; background: #ed8936;" onclick="resetStory('${story.id}'); event.stopPropagation();">↻ Reset</button>` : '';
                 const actionButtons = currentRole === 'facilitator' ? `
                     <div style="display: flex; gap: 5px; margin-top: 8px;">
                         <button class="btn btn-primary" style="padding: 6px 10px; font-size: 12px; flex: 1;" onclick="editStory('${story.id}'); event.stopPropagation();">✏️ Edit</button>
+                        ${resetBtn}
                         <button class="btn btn-danger" style="padding: 6px 10px; font-size: 12px; flex: 1;" onclick="deleteStory('${story.id}'); event.stopPropagation();">🗑️ Delete</button>
                     </div>
                 ` : '';
@@ -1563,8 +1566,21 @@
                     document.getElementById('voteCards').innerHTML = '';
                 }
 
-                // Clear estimate result when selecting a new story
-                document.getElementById('estimateResult').innerHTML = '';
+                // Clear estimate result when selecting a new story (unless it's finished, then show it)
+                if (!story.finished) {
+                    document.getElementById('estimateResult').innerHTML = '';
+                } else {
+                    // Show estimate result for finished stories
+                    const estimate = story.estimate;
+                    if (estimate !== null && estimate !== undefined) {
+                        document.getElementById('estimateResult').innerHTML = `
+                            <div class="estimate-result">
+                                <h4>✓ Final Estimate</h4>
+                                <div class="estimate-value">${estimate}</div>
+                            </div>
+                        `;
+                    }
+                }
 
                 // Show voting in progress message for observers
                 if (currentRole === 'observer' && !story.finished && isCurrentVotingStory) {
@@ -1575,6 +1591,16 @@
                         </div>
                     `;
                     document.getElementById('votesDisplay').innerHTML = votingMessage;
+                } else if (currentRole === 'participant' && story.finished && isCurrentVotingStory) {
+                    // Show voting complete message for participants
+                    const completionMessage = `
+                        <div style="background: #c6f6d5; border: 2px solid #22863a; border-radius: 6px; padding: 15px; margin-bottom: 15px; color: #22543d;">
+                            <strong style="font-size: 16px;">✓ Voting Complete</strong><br>
+                            <span style="font-size: 14px;">The team has finished estimating. See the results and discussion below.</span>
+                        </div>
+                    `;
+                    document.getElementById('votesDisplay').innerHTML = completionMessage;
+                    renderVotes(story);
                 } else if (currentRole !== 'observer' || story.finished) {
                     // Show votes for non-observers or when voting is finished
                     renderVotes(story);
@@ -2033,9 +2059,39 @@
 
             if (confirm(`Delete story "${story.title}"?`)) {
                 session.stories = session.stories.filter(s => s.id !== storyId);
+
+                // Clear currentStoryId if the deleted story was the current voting story
+                if (session.currentStoryId === storyId) {
+                    session.currentStoryId = null;
+                    document.getElementById('votingArea').style.display = 'none';
+                    document.getElementById('emptyState').style.display = 'block';
+                }
+
                 await saveData();
                 renderStories(session.stories);
                 showToast('Story deleted!');
+            }
+        }
+
+        async function resetStory(storyId) {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can reset stories', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === storyId);
+            if (!story) return;
+
+            if (confirm(`Reset votes for "${story.title}"? This will clear all votes and allow re-voting.`)) {
+                story.votes = {};
+                story.estimate = null;
+                story.finished = false;
+                story.votingStarted = false;
+                story.timerStartedAt = null;
+                await saveData();
+                selectStory(storyId);
+                renderStories(session.stories);
+                showToast('Story reset! Ready for re-voting.');
             }
         }
 
