@@ -244,21 +244,59 @@
         .participant {
             display: flex;
             align-items: center;
-            padding: 10px;
+            padding: 10px 12px;
             background: #f7fafc;
             border-radius: 6px;
             font-size: 14px;
             color: #2d3748;
+            border-left: 3px solid #cbd5e0;
         }
 
-        .participant::before {
-            content: '';
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: #48bb78;
-            border-radius: 50%;
-            margin-right: 10px;
+        .participant.facilitator {
+            border-left-color: #0066b2;
+            background: #f0f5fb;
+        }
+
+        .participant.participant-role {
+            border-left-color: #48bb78;
+            background: #f0fdf4;
+        }
+
+        .participant.observer {
+            border-left-color: #a0aec0;
+            background: #f9fafb;
+        }
+
+        .participant-icon {
+            font-size: 16px;
+            margin-right: 8px;
+        }
+
+        .participant-name {
+            flex: 1;
+        }
+
+        .participant-badge {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: auto;
+        }
+
+        .participant-badge.facilitator {
+            background: #dbeafe;
+            color: #0066b2;
+        }
+
+        .participant-badge.participant-role {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .participant-badge.observer {
+            background: #f3f4f6;
+            color: #6b7280;
         }
 
         .main-content {
@@ -477,7 +515,10 @@
                     <h2 id="sessionTitle"></h2>
                     <p id="sessionStats" style="color: #718096; margin-top: 5px;"></p>
                 </div>
-                <button class="btn btn-danger" onclick="closeSession()">Close Session</button>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary" style="background: #718096;" onclick="goHome()">← Back to Home</button>
+                    <button class="btn btn-danger" onclick="closeSession()">Close Session</button>
+                </div>
             </div>
 
             <div class="session-grid">
@@ -550,35 +591,6 @@
                         <option value="observer">Observer (watches only)</option>
                     </select>
                 </div>
-                <div style="background: #f0f5fb; padding: 15px; border-radius: 6px; margin-top: 15px;">
-                    <label style="display: flex; align-items: center; margin-bottom: 0; cursor: pointer;">
-                        <input type="checkbox" id="useJiraCheckbox" style="margin-right: 8px; cursor: pointer;">
-                        <span style="font-size: 14px; font-weight: 500;">Pre-load stories from Jira</span>
-                    </label>
-                </div>
-                <div id="jiraConfigForm" style="display: none; margin-top: 15px; padding: 15px; background: #fafbfc; border-radius: 6px; border-left: 3px solid #0066b2;">
-                    <div class="form-group">
-                        <label>Jira URL *</label>
-                        <input type="text" id="jiraUrl" placeholder="https://your-domain.atlassian.net">
-                    </div>
-                    <div class="form-group">
-                        <label>Email *</label>
-                        <input type="email" id="jiraEmail" placeholder="your-email@company.com">
-                    </div>
-                    <div class="form-group">
-                        <label>API Token *</label>
-                        <input type="password" id="jiraToken" placeholder="Your Jira API token">
-                    </div>
-                    <div class="form-group">
-                        <label>Project Key *</label>
-                        <input type="text" id="jiraProjectKey" placeholder="PROJ">
-                    </div>
-                    <button class="btn btn-primary" style="width: 100%;" onclick="fetchJiraIssues()">Fetch Issues</button>
-                </div>
-                <div id="jiraIssuesContainer" style="display: none; margin-top: 15px;">
-                    <div id="jiraIssuesList"></div>
-                    <button class="btn btn-success" style="width: 100%; margin-top: 10px;" onclick="importSelectedJiraIssues()">Import Selected Issues</button>
-                </div>
                 <div class="form-actions">
                     <button class="btn btn-primary" onclick="createSession()">Create Session</button>
                     <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('createSessionModal')">Cancel</button>
@@ -628,8 +640,8 @@
                     <input type="text" id="storyTitleInput" placeholder="User can view their profile">
                 </div>
                 <div class="form-group">
-                    <label>Description</label>
-                    <textarea id="storyDescInput" placeholder="Story details" style="min-height: 80px;"></textarea>
+                    <label>Jira</label>
+                    <input type="text" id="storyJiraInput" placeholder="e.g., SP-123">
                 </div>
                 <div class="form-actions">
                     <button class="btn btn-primary" onclick="addStory()">Add</button>
@@ -841,139 +853,9 @@
             document.getElementById('sessionNameInput').value = '';
             document.getElementById('participantNameInput').value = '';
             document.getElementById('roleSelect').value = 'facilitator';
-            document.getElementById('useJiraCheckbox').checked = false;
-            document.getElementById('jiraConfigForm').style.display = 'none';
-            document.getElementById('jiraIssuesContainer').style.display = 'none';
             document.getElementById('createSessionModal').classList.add('active');
-
-            // Load saved Jira credentials
-            const savedJiraConfig = localStorage.getItem('jiraConfig');
-            if (savedJiraConfig) {
-                try {
-                    const config = JSON.parse(savedJiraConfig);
-                    document.getElementById('jiraUrl').value = config.url || '';
-                    document.getElementById('jiraEmail').value = config.email || '';
-                    document.getElementById('jiraToken').value = config.token || '';
-                    document.getElementById('jiraProjectKey').value = config.projectKey || '';
-                } catch (e) {
-                    // Ignore parsing errors
-                }
-            }
-
-            // Setup Jira checkbox listener
-            document.getElementById('useJiraCheckbox').onchange = (e) => {
-                document.getElementById('jiraConfigForm').style.display = e.target.checked ? 'block' : 'none';
-            };
         }
 
-        // Jira Integration
-        async function fetchJiraIssues() {
-            let jiraUrl = document.getElementById('jiraUrl').value.trim();
-            const jiraEmail = document.getElementById('jiraEmail').value.trim();
-            const jiraToken = document.getElementById('jiraToken').value.trim();
-            const projectKey = document.getElementById('jiraProjectKey').value.trim().toUpperCase();
-
-            if (!jiraUrl || !jiraEmail || !jiraToken || !projectKey) {
-                showToast('Please fill in all Jira fields', 'error');
-                return;
-            }
-
-            // Remove trailing slash from URL
-            jiraUrl = jiraUrl.replace(/\/$/, '');
-
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = 'Fetching...';
-
-            try {
-                const jql = `project = "${projectKey}" AND status NOT IN (Done, Closed) ORDER BY created DESC LIMIT 50`;
-                const auth = btoa(`${jiraEmail}:${jiraToken}`);
-                const jiraApiUrl = `${jiraUrl}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50&fields=key,summary,description,status`;
-
-                // Try direct fetch first (if CORS is allowed)
-                let response = await fetch(jiraApiUrl, {
-                    headers: {
-                        'Authorization': `Basic ${auth}`,
-                        'Content-Type': 'application/json'
-                    }
-                }).catch(async (e) => {
-                    // If direct fetch fails due to CORS, use proxy
-                    const corsProxy = 'https://api.allorigins.win/raw?url=';
-                    const url = corsProxy + encodeURIComponent(jiraApiUrl);
-                    return fetch(url, {
-                        headers: {
-                            'Authorization': `Basic ${auth}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                });
-
-                if (!response.ok) {
-                    if (response.status === 401) {
-                        throw new Error('Invalid Jira credentials');
-                    } else if (response.status === 403) {
-                        throw new Error('Access denied - check permissions');
-                    }
-                    throw new Error(`Jira API error: ${response.status}`);
-                }
-
-                const data = await response.json();
-                if (!data.issues || data.issues.length === 0) {
-                    showToast('No issues found', 'error');
-                    btn.disabled = false;
-                    btn.textContent = 'Fetch Issues';
-                    return;
-                }
-
-                selectedJiraIssues = data.issues.map(issue => ({
-                    key: issue.key,
-                    summary: issue.fields.summary,
-                    description: issue.fields.description?.plainText || '',
-                    selected: false
-                }));
-
-                const issuesList = document.getElementById('jiraIssuesList');
-                issuesList.innerHTML = `
-                    <h4 style="color: #2d3748; margin-bottom: 10px;">Found ${selectedJiraIssues.length} issue(s)</h4>
-                    ${selectedJiraIssues.map((issue, idx) => `
-                        <div style="display: flex; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 8px;">
-                            <input type="checkbox" id="jira_${idx}" onchange="selectedJiraIssues[${idx}].selected = this.checked;" style="margin-right: 10px; cursor: pointer;">
-                            <div style="flex: 1;">
-                                <label for="jira_${idx}" style="cursor: pointer;">
-                                    <strong style="color: #0066b2;">${issue.key}</strong> - ${issue.summary}
-                                </label>
-                            </div>
-                        </div>
-                    `).join('')}
-                `;
-
-                document.getElementById('jiraIssuesContainer').style.display = 'block';
-                showToast(`Found ${selectedJiraIssues.length} issues`);
-            } catch (error) {
-                showToast(`Jira error: ${error.message}`, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Fetch Issues';
-            }
-        }
-
-        function importSelectedJiraIssues() {
-            const selected = selectedJiraIssues.filter(i => i.selected);
-            if (selected.length === 0) {
-                showToast('Select at least one issue', 'error');
-                return;
-            }
-            window.jiraIssuesToImport = selected;
-            window.jiraConfig = {
-                url: document.getElementById('jiraUrl').value.trim(),
-                email: document.getElementById('jiraEmail').value.trim(),
-                token: document.getElementById('jiraToken').value.trim(),
-                projectKey: document.getElementById('jiraProjectKey').value.trim().toUpperCase()
-            };
-            // Save Jira config to localStorage for next time
-            localStorage.setItem('jiraConfig', JSON.stringify(window.jiraConfig));
-            showToast(`${selected.length} issue(s) ready to import`);
-        }
 
         function showJoinSessionForm() {
             document.getElementById('sessionCodeInput').value = '';
@@ -984,7 +866,7 @@
 
         function showAddStoryForm() {
             document.getElementById('storyTitleInput').value = '';
-            document.getElementById('storyDescInput').value = '';
+            document.getElementById('storyJiraInput').value = '';
             document.getElementById('addStoryModal').classList.add('active');
         }
 
@@ -1003,20 +885,6 @@
             const code = generateCode();
             const userId = generateId();
 
-            let stories = [];
-
-            // Import Jira issues if selected
-            if (window.jiraIssuesToImport && window.jiraIssuesToImport.length > 0) {
-                stories = window.jiraIssuesToImport.map(issue => ({
-                    id: generateId(),
-                    title: issue.summary,
-                    description: issue.description,
-                    jiraKey: issue.key,
-                    votes: {},
-                    estimate: null
-                }));
-            }
-
             const session = {
                 id: sessionId,
                 code: code,
@@ -1024,8 +892,7 @@
                 createdAt: new Date().toISOString(),
                 status: 'active',
                 participants: [{ id: userId, name: participantName, role: role }],
-                stories: stories,
-                jiraConfig: window.jiraConfig || null
+                stories: []
             };
 
             allSessions.push(session);
@@ -1036,14 +903,9 @@
             currentRole = role;
             currentUser = session.participants[0];
 
-            // Reset Jira data
-            window.jiraIssuesToImport = null;
-            window.jiraConfig = null;
-
             closeModal('createSessionModal');
             await enterSession(sessionId);
-            const importMsg = stories.length > 0 ? ` with ${stories.length} Jira issue(s)` : '';
-            showToast(`Session created! Code: ${code}${importMsg}`);
+            showToast(`Session created! Code: ${code}`);
         }
 
         // Join session
@@ -1062,6 +924,15 @@
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
+            }
+
+            // Check if facilitator role is already taken
+            if (role === 'facilitator') {
+                const facilitatorExists = session.participants.some(p => p.role === 'facilitator');
+                if (facilitatorExists) {
+                    showToast('This session already has a facilitator. Join as participant or observer instead.', 'error');
+                    return;
+                }
             }
 
             const userId = generateId();
@@ -1102,9 +973,24 @@
 
         function renderParticipants(participants) {
             const list = document.getElementById('participantsList');
-            list.innerHTML = participants.map(p =>
-                `<div class="participant">${p.name} <span style="font-size: 11px; margin-left: 5px;">• ${p.role}</span></div>`
-            ).join('');
+
+            const roleConfig = {
+                facilitator: { icon: '🎯', label: 'Facilitator' },
+                participant: { icon: '🗳️', label: 'Participant' },
+                observer: { icon: '👁️', label: 'Observer' }
+            };
+
+            list.innerHTML = participants.map(p => {
+                const config = roleConfig[p.role] || { icon: '•', label: p.role };
+                const roleClass = p.role === 'participant' ? 'participant-role' : p.role;
+                return `
+                    <div class="participant ${roleClass}">
+                        <span class="participant-icon">${config.icon}</span>
+                        <span class="participant-name">${p.name}</span>
+                        <span class="participant-badge ${roleClass}">${config.label}</span>
+                    </div>
+                `;
+            }).join('');
         }
 
         function renderStories(stories) {
@@ -1117,12 +1003,11 @@
             list.innerHTML = stories.map(story => {
                 const badgeClass = story.estimate ? 'background: #c6f6d5; color: #22543d;' : 'background: #feebc8; color: #c05621;';
                 const badgeText = story.estimate ? `✓ Done (${story.estimate})` : 'Pending';
-                const jiraKeyDisplay = story.jiraKey ? `<span style="color: #0066b2; margin-right: 8px; font-weight: 600;">🔗 ${story.jiraKey}</span>` : '';
+                const jiraDisplay = story.jiraKey ? `<span style="color: #0066b2; font-size: 12px; font-weight: 600; margin-right: 8px;">🔗 ${story.jiraKey}</span>` : '';
 
                 return `
                     <div class="story-item" onclick="selectStory('${story.id}')">
-                        <div class="story-title">${jiraKeyDisplay}${story.title}</div>
-                        <div style="font-size: 12px; color: #718096; margin: 8px 0;">${story.description || 'No description'}</div>
+                        <div class="story-title">${jiraDisplay}${story.title}</div>
                         <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
                     </div>
                 `;
@@ -1282,66 +1167,6 @@
             }
         }
 
-        async function syncToJira(storyId) {
-            const session = allSessions.find(s => s.id === currentSessionId);
-            const story = session.stories.find(s => s.id === storyId);
-
-            if (!story || !story.jiraKey || !session.jiraConfig) {
-                showToast('Story not linked to Jira', 'error');
-                return;
-            }
-
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = 'Syncing...';
-
-            try {
-                const config = session.jiraConfig;
-                const auth = btoa(`${config.email}:${config.token}`);
-                let baseUrl = config.url.replace(/\/$/, '');
-                const issueUrl = `${baseUrl}/rest/api/3/issues/${story.jiraKey}`;
-
-                // Try direct fetch first, with fallback to proxy
-                let updateResponse = await fetch(issueUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Basic ${auth}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        fields: {
-                            customfield_10005: parseFloat(story.estimate)
-                        }
-                    })
-                }).catch(async (e) => {
-                    // If direct fails, use proxy
-                    const corsProxy = 'https://api.allorigins.win/raw?url=';
-                    return fetch(corsProxy + encodeURIComponent(issueUrl), {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `Basic ${auth}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            fields: {
-                                customfield_10005: parseFloat(story.estimate)
-                            }
-                        })
-                    });
-                });
-
-                if (!updateResponse.ok) {
-                    throw new Error(`Failed to sync: ${updateResponse.status}`);
-                }
-
-                showToast(`✓ Synced to Jira: ${story.jiraKey}`);
-            } catch (error) {
-                showToast(`Sync error: ${error.message}`, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Sync to Jira';
-            }
-        }
 
         async function finishVoting() {
             stopTimer(); // Stop the timer if running
@@ -1371,14 +1196,10 @@
             story.estimate = estimate;
             await saveData();
 
-            const syncButton = story.jiraKey && session.jiraConfig ?
-                `<button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="syncToJira('${story.id}')">🔗 Sync to Jira</button>` : '';
-
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
                     <h4>✓ Voting Complete</h4>
                     <div class="estimate-value">${estimate}</div>
-                    ${syncButton}
                 </div>
             `;
 
@@ -1401,7 +1222,7 @@
             }
 
             const title = document.getElementById('storyTitleInput').value.trim();
-            const desc = document.getElementById('storyDescInput').value.trim();
+            const jiraKey = document.getElementById('storyJiraInput').value.trim().toUpperCase();
 
             if (!title) {
                 showToast('Story title is required', 'error');
@@ -1419,13 +1240,19 @@
                 session.stories = [];
             }
 
-            session.stories.push({
+            const story = {
                 id: generateId(),
                 title: title,
-                description: desc,
                 votes: {},
                 estimate: null
-            });
+            };
+
+            // Add Jira key if provided
+            if (jiraKey) {
+                story.jiraKey = jiraKey;
+            }
+
+            session.stories.push(story);
 
             await saveData();
             closeModal('addStoryModal');
