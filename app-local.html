@@ -815,10 +815,10 @@
             const icon = document.getElementById('toggleIcon');
             if (input.type === 'password') {
                 input.type = 'text';
-                icon.textContent = '🐵';
+                icon.innerHTML = '🐵';
             } else {
                 input.type = 'password';
-                icon.textContent = '🙈';
+                icon.innerHTML = '🙈';
             }
         }
 
@@ -1393,12 +1393,15 @@
 
             // Control question form visibility based on voting status
             const questionFormArea = document.getElementById('questionFormArea');
-            if (session.status === 'active' && story.finished) {
-                // After voting finishes, only facilitators can modify questions
+            if (currentRole === 'observer') {
+                // Observers cannot ask questions
+                questionFormArea.style.display = 'none';
+            } else if (session.status === 'active' && story.finished) {
+                // After voting finishes, only facilitators can ask/modify questions
                 questionFormArea.style.display = currentRole === 'facilitator' ? 'block' : 'none';
-            } else if (session.status === 'pending' || (session.status === 'active' && !story.finished)) {
-                // Before or during voting, show form for facilitators only
-                questionFormArea.style.display = currentRole === 'facilitator' ? 'block' : 'none';
+            } else {
+                // Before voting starts or during voting, participants and facilitators can ask questions
+                questionFormArea.style.display = 'block';
             }
 
             if (session.status === 'pending') {
@@ -1548,17 +1551,23 @@
             stopTimer(); // Stop the timer if running
 
             const session = allSessions.find(s => s.id === currentSessionId);
-            const story = session.stories.find(s => {
-                const votes = s.votes || {};
-                return Object.keys(votes).length > 0;
-            });
+            if (!session || !currentSelectedStoryId) {
+                showToast('No story selected', 'error');
+                return;
+            }
 
+            const story = session.stories.find(s => s.id === currentSelectedStoryId);
             if (!story) {
-                showToast('Need at least one vote', 'error');
+                showToast('Story not found', 'error');
                 return;
             }
 
             const votes = Object.values(story.votes || {});
+            if (votes.length === 0) {
+                showToast('Need at least one vote', 'error');
+                return;
+            }
+
             const numericValues = votes.filter(v => !isNaN(v) && v !== '?').map(Number);
 
             let estimate;
@@ -1666,6 +1675,12 @@
 
             const story = session.stories.find(s => s.id === currentSelectedStoryId);
             if (!story) return;
+
+            // Observers cannot ask questions
+            if (currentRole === 'observer') {
+                showToast('Observers cannot ask questions', 'error');
+                return;
+            }
 
             // Check if voting is finished - only facilitators can add questions after voting
             if (session.status === 'active' && story.finished && currentRole !== 'facilitator') {
