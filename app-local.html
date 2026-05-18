@@ -532,7 +532,8 @@
                 </div>
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-primary" style="background: #718096;" onclick="goHome()">← Back to Home</button>
-                    <button class="btn btn-danger" onclick="closeSession()">Close Session</button>
+                    <button class="btn btn-success" id="startSessionBtn" style="display: none;" onclick="startSession()">Start Session</button>
+                    <button class="btn btn-danger" id="closeSessionBtn" style="display: none;" onclick="closeSession()">Close Session</button>
                 </div>
             </div>
 
@@ -570,10 +571,21 @@
 
                         <div class="vote-cards" id="voteCards"></div>
 
-                        <button class="btn btn-primary" style="width: 100%;" onclick="finishVoting()">Finish Voting</button>
+                        <button class="btn btn-primary" id="finishVotingBtn" style="width: 100%; display: none;" onclick="finishVoting()">Finish Voting</button>
 
                         <div id="votesDisplay"></div>
                         <div id="estimateResult"></div>
+                    </div>
+
+                    <div id="questionsSection" style="display: none;">
+                        <h3 style="color: #2d3748; margin-bottom: 15px;">Questions & Discussion</h3>
+                        <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <textarea id="questionInput" placeholder="Ask a question or share thoughts about the stories..." style="resize: vertical; min-height: 80px;"></textarea>
+                            </div>
+                            <button class="btn btn-primary" style="width: 100%;" onclick="addQuestion()">Post Question</button>
+                        </div>
+                        <div id="questionsList" style="max-height: 400px; overflow-y: auto;"></div>
                     </div>
 
                     <div id="emptyState" style="text-align: center; padding: 40px 20px; color: #718096;">
@@ -910,13 +922,16 @@
                 code: code,
                 name: name,
                 createdAt: new Date().toISOString(),
-                status: 'active',
+                status: 'pending',
                 participants: [{ id: userId, name: participantName, role: role }],
                 stories: []
             };
 
             allSessions.push(session);
             await saveData();
+
+            // Store user ID so they can rejoin as themselves
+            localStorage.setItem(`user_${code}`, userId);
 
             currentSessionId = sessionId;
             currentUserId = userId;
@@ -946,6 +961,27 @@
                 return;
             }
 
+            // Check if user already exists in this session
+            const storageKey = `user_${code}`;
+            let userId = localStorage.getItem(storageKey);
+            let existingUser = null;
+
+            if (userId) {
+                existingUser = session.participants.find(p => p.id === userId);
+            }
+
+            // If user exists, rejoin with same ID
+            if (existingUser) {
+                currentSessionId = session.id;
+                currentUserId = userId;
+                currentRole = existingUser.role;
+                currentUser = existingUser;
+                closeModal('joinSessionModal');
+                await enterSession(session.id);
+                showToast(`Rejoined as ${existingUser.name}!`);
+                return;
+            }
+
             // Check if facilitator role is already taken
             if (role === 'facilitator') {
                 const facilitatorExists = session.participants.some(p => p.role === 'facilitator');
@@ -955,7 +991,9 @@
                 }
             }
 
-            const userId = generateId();
+            // New user joining
+            userId = generateId();
+            localStorage.setItem(storageKey, userId);
             session.participants.push({ id: userId, name: participantName, role: role });
             await saveData();
 
@@ -991,6 +1029,17 @@
             document.getElementById('sessionTitle').textContent = session.name;
             document.getElementById('sessionStats').textContent =
                 `Code: ${session.code} | ${session.participants.length} participant(s) | ${session.stories.length} stor${session.stories.length !== 1 ? 'ies' : 'y'}`;
+
+            // Show start/close session buttons only for facilitators
+            const startSessionBtn = document.getElementById('startSessionBtn');
+            const closeSessionBtn = document.getElementById('closeSessionBtn');
+            if (currentRole === 'facilitator') {
+                startSessionBtn.style.display = session.status === 'pending' ? 'block' : 'none';
+                closeSessionBtn.style.display = 'block';
+            } else {
+                startSessionBtn.style.display = 'none';
+                closeSessionBtn.style.display = 'none';
+            }
 
             renderParticipants(session.participants);
             renderStories(session.stories);
@@ -1122,35 +1171,57 @@
                 return;
             }
 
+            // Track current selected story for questions
+            currentSelectedStoryId = storyId;
+
+            // Initialize questions array if it doesn't exist
+            if (!story.questions) {
+                story.questions = [];
+            }
+
+            // Reset finished flag for new voting round
+            story.finished = false;
+
             // Display title with optional Jira link
             let titleDisplay = story.title;
             if (story.jiraKey && story.jiraLink) {
                 titleDisplay = `<a href="${story.jiraLink}" target="_blank" style="color: #0066b2; text-decoration: none; font-weight: 600;">🔗 ${story.jiraKey}</a> - ${story.title}`;
             }
 
-            document.getElementById('currentStoryTitle').innerHTML = titleDisplay;
-            document.getElementById('currentStoryDesc').textContent = story.description || '';
             document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('votingArea').style.display = 'block';
+            document.getElementById('questionsSection').style.display = 'block';
+            renderQuestions(story);
 
-            // Show timer section only for facilitators
-            const timerSection = document.getElementById('timerSection');
-            if (currentRole === 'facilitator') {
-                timerSection.style.display = 'block';
-                document.getElementById('startTimerBtn').disabled = false;
-                document.getElementById('startTimerBtn').textContent = 'Start Timer';
-                timeRemaining = TIMER_DURATION;
-                document.getElementById('timerDisplay').textContent = '2:00';
-                document.getElementById('timerProgress').style.width = '100%';
-                document.getElementById('timerDisplay').className = 'timer-display';
-                document.getElementById('timerProgress').className = 'timer-progress';
-                stopTimer(); // Clear any running timer
+            if (session.status === 'pending') {
+                document.getElementById('votingArea').style.display = 'none';
             } else {
-                timerSection.style.display = 'none';
-            }
+                document.getElementById('currentStoryTitle').innerHTML = titleDisplay;
+                document.getElementById('currentStoryDesc').textContent = story.description || '';
+                document.getElementById('votingArea').style.display = 'block';
+                document.getElementById('votesDisplay').innerHTML = '';
 
-            renderVoteCards(story);
-            renderVotes(story);
+                // Show timer section and finish voting button only for facilitators
+                const timerSection = document.getElementById('timerSection');
+                const finishVotingBtn = document.getElementById('finishVotingBtn');
+                if (currentRole === 'facilitator') {
+                    timerSection.style.display = 'block';
+                    finishVotingBtn.style.display = 'block';
+                    document.getElementById('startTimerBtn').disabled = false;
+                    document.getElementById('startTimerBtn').textContent = 'Start Timer';
+                    timeRemaining = TIMER_DURATION;
+                    document.getElementById('timerDisplay').textContent = '2:00';
+                    document.getElementById('timerProgress').style.width = '100%';
+                    document.getElementById('timerDisplay').className = 'timer-display';
+                    document.getElementById('timerProgress').className = 'timer-progress';
+                    stopTimer(); // Clear any running timer
+                } else {
+                    timerSection.style.display = 'none';
+                    finishVotingBtn.style.display = 'none';
+                }
+
+                renderVoteCards(story);
+                renderVotes(story);
+            }
         }
 
         function renderVoteCards(story) {
@@ -1165,6 +1236,10 @@
 
         async function vote(storyId, value) {
             const session = allSessions.find(s => s.id === currentSessionId);
+            if (session.status !== 'active') {
+                showToast('Session has not started yet', 'error');
+                return;
+            }
             const story = session.stories.find(s => s.id === storyId);
 
             if (!story.votes) story.votes = {};
@@ -1178,17 +1253,25 @@
         function renderVotes(story) {
             const session = allSessions.find(s => s.id === currentSessionId);
             const votes = story.votes || {};
-            const voteList = Object.entries(votes).map(([userId, value]) => {
+
+            // During voting, only show own vote. After finished, show all votes
+            let displayVotes = votes;
+            if (!story.finished) {
+                displayVotes = currentUserId in votes ? { [currentUserId]: votes[currentUserId] } : {};
+            }
+
+            const voteList = Object.entries(displayVotes).map(([userId, value]) => {
                 const participant = session.participants.find(p => p.id === userId);
+                const isOwnVote = userId === currentUserId;
                 return `
                     <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-                        <span>${participant?.name || 'Unknown'}</span>
+                        <span>${isOwnVote ? 'Your vote' : (participant?.name || 'Unknown')}</span>
                         <span style="background: #0066b2; color: white; padding: 4px 12px; border-radius: 4px;">${value}</span>
                     </div>
                 `;
             }).join('');
 
-            if (Object.keys(votes).length > 0) {
+            if (Object.keys(displayVotes).length > 0) {
                 document.getElementById('votesDisplay').innerHTML = `
                     <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-top: 20px;">
                         <h4 style="margin-bottom: 15px; color: #2d3748;">Votes (${Object.keys(votes).length})</h4>
@@ -1225,7 +1308,10 @@
             }
 
             story.estimate = estimate;
+            story.finished = true;
             await saveData();
+
+            renderVotes(story);
 
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
@@ -1243,6 +1329,64 @@
                 document.getElementById('votesDisplay').innerHTML = '';
                 renderStories(session.stories);
             }, 3000);
+        }
+
+        let currentSelectedStoryId = null;
+
+        // Add question for the current story
+        async function addQuestion() {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session || !currentSelectedStoryId) return;
+
+            const story = session.stories.find(s => s.id === currentSelectedStoryId);
+            if (!story) return;
+
+            const questionText = document.getElementById('questionInput').value.trim();
+            if (!questionText) {
+                showToast('Please enter a question', 'error');
+                return;
+            }
+
+            if (!story.questions) story.questions = [];
+
+            const question = {
+                id: generateId(),
+                text: questionText,
+                authorId: currentUserId,
+                authorName: currentUser?.name || 'Anonymous',
+                timestamp: new Date().toISOString()
+            };
+
+            story.questions.push(question);
+            await saveData();
+
+            document.getElementById('questionInput').value = '';
+            renderQuestions(story);
+            showToast('Question posted!');
+        }
+
+        function renderQuestions(story) {
+            const questions = story.questions || [];
+            const questionsList = document.getElementById('questionsList');
+
+            if (questions.length === 0) {
+                questionsList.innerHTML = '<p style="color: #718096; text-align: center; padding: 20px;">No questions yet. Be the first to ask!</p>';
+                return;
+            }
+
+            questionsList.innerHTML = questions.map(q => {
+                const date = new Date(q.timestamp);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return `
+                    <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #0066b2;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="font-weight: 600; color: #2d3748;">${q.authorName}</span>
+                            <span style="color: #a0aec0; font-size: 12px;">${timeStr}</span>
+                        </div>
+                        <p style="color: #4a5568; margin: 0;">${q.text}</p>
+                    </div>
+                `;
+            }).join('');
         }
 
         // Add story
@@ -1276,7 +1420,8 @@
                 id: generateId(),
                 title: title,
                 votes: {},
-                estimate: null
+                estimate: null,
+                questions: []
             };
 
             // Add Jira key and link if provided
@@ -1295,8 +1440,27 @@
             showToast('Story added!');
         }
 
+        // Start session (transition from pending to active)
+        async function startSession() {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can start sessions', 'error');
+                return;
+            }
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (session) {
+                session.status = 'active';
+                await saveData();
+                renderSession(currentSessionId);
+                showToast('Session started! Voting is now enabled.');
+            }
+        }
+
         // Close session
         async function closeSession() {
+            if (currentRole !== 'facilitator') {
+                showToast('Only facilitators can close sessions', 'error');
+                return;
+            }
             if (confirm('Close this session?')) {
                 const session = allSessions.find(s => s.id === currentSessionId);
                 session.status = 'closed';
