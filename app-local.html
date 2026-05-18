@@ -963,6 +963,11 @@
             const session = allSessions.find(s => s.id === sessionId);
             if (!session) return;
 
+            // Ensure stories array exists
+            if (!session.stories) {
+                session.stories = [];
+            }
+
             document.getElementById('sessionTitle').textContent = session.name;
             document.getElementById('sessionStats').textContent =
                 `Code: ${session.code} | ${session.participants.length} participant(s) | ${session.stories.length} stor${session.stories.length !== 1 ? 'ies' : 'y'}`;
