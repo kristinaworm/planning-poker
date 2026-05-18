@@ -981,6 +981,15 @@
                     if (session) {
                         renderSession(currentSessionId);
 
+                        // Refresh current story's questions and votes
+                        if (currentSelectedStoryId) {
+                            const currentStory = session.stories.find(s => s.id === currentSelectedStoryId);
+                            if (currentStory) {
+                                renderQuestions(currentStory);
+                                renderVotes(currentStory);
+                            }
+                        }
+
                         // Auto-select facilitator's story for non-facilitators
                         if (currentRole !== 'facilitator' && session.currentStoryId && session.currentStoryId !== currentSelectedStoryId) {
                             const currentStory = session.stories.find(s => s.id === session.currentStoryId);
