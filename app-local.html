@@ -1016,6 +1016,11 @@
                             if (currentStory) {
                                 renderQuestions(currentStory);
                                 renderVotes(currentStory);
+
+                                // Update timer display if timer is running
+                                if (currentStory.timerStartedAt && !currentStory.finished) {
+                                    updateTimerDisplay(currentStory);
+                                }
                             }
                         }
 
@@ -1033,7 +1038,7 @@
                         }
                     }
                 }
-            }, 2000);
+            }, 1000);
         }
 
         function stopAutoRefresh() {
@@ -1336,7 +1341,7 @@
 
         // Timer functionality
         let timerInterval = null;
-        let timeRemaining = 120;
+        let timerDisplayInterval = null;
         const TIMER_DURATION = 120;
 
         async function startTimer() {
@@ -1347,8 +1352,9 @@
 
             if (!story) return;
 
-            // Mark voting as officially started
+            // Mark voting as officially started with timestamp
             story.votingStarted = true;
+            story.timerStartedAt = Date.now();
             await saveData();
 
             // Re-render vote cards for participants to show them as active
@@ -1356,35 +1362,15 @@
                 renderVoteCards(story);
             }
 
-            timeRemaining = TIMER_DURATION;
             document.getElementById('startTimerBtn').disabled = true;
             document.getElementById('startTimerBtn').textContent = 'Timer Running...';
 
+            // Update timer display every 100ms to show smooth countdown
             timerInterval = setInterval(() => {
-                timeRemaining--;
-
-                const minutes = Math.floor(timeRemaining / 60);
-                const seconds = timeRemaining % 60;
-                const display = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                document.getElementById('timerDisplay').textContent = display;
-
-                const progress = (timeRemaining / TIMER_DURATION) * 100;
-                const progressBar = document.getElementById('timerProgress');
-                progressBar.style.width = progress + '%';
-
-                const timerDisplay = document.getElementById('timerDisplay');
-                timerDisplay.className = 'timer-display';
-                progressBar.className = 'timer-progress';
-
-                if (timeRemaining <= 30) {
-                    timerDisplay.classList.add('critical');
-                    progressBar.classList.add('critical');
-                } else if (timeRemaining <= 60) {
-                    timerDisplay.classList.add('warning');
-                    progressBar.classList.add('warning');
-                }
+                updateTimerDisplay(story);
 
                 // Auto-finish when timer ends
+                const timeRemaining = TIMER_DURATION - Math.floor((Date.now() - story.timerStartedAt) / 1000);
                 if (timeRemaining <= 0) {
                     clearInterval(timerInterval);
                     timerInterval = null;
@@ -1401,7 +1387,39 @@
                     showToast('All votes in! Finishing voting...');
                     finishVoting();
                 }
-            }, 1000);
+            }, 100);
+        }
+
+        function updateTimerDisplay(story) {
+            if (!story.timerStartedAt) return;
+
+            const timeRemaining = Math.max(0, TIMER_DURATION - Math.floor((Date.now() - story.timerStartedAt) / 1000));
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            const display = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+            const timerDisplay = document.getElementById('timerDisplay');
+            if (timerDisplay) {
+                timerDisplay.textContent = display;
+            }
+
+            const progressBar = document.getElementById('timerProgress');
+            if (progressBar) {
+                const progress = (timeRemaining / TIMER_DURATION) * 100;
+                progressBar.style.width = progress + '%';
+
+                // Update classes
+                timerDisplay.className = 'timer-display';
+                progressBar.className = 'timer-progress';
+
+                if (timeRemaining <= 30) {
+                    timerDisplay.classList.add('critical');
+                    progressBar.classList.add('critical');
+                } else if (timeRemaining <= 60) {
+                    timerDisplay.classList.add('warning');
+                    progressBar.classList.add('warning');
+                }
+            }
         }
 
         function stopTimer() {
@@ -1494,8 +1512,8 @@
                 // Determine if this user can vote (only on current voting story that hasn't finished)
                 const canVote = currentRole === 'participant' && !story.finished && isCurrentVotingStory;
 
-                // Show timer for facilitators and observers during active voting
-                if (!story.finished && (currentRole === 'facilitator' || currentRole === 'observer')) {
+                // Show timer for facilitators, participants, and observers during active voting
+                if (!story.finished && (currentRole === 'facilitator' || currentRole === 'observer' || (currentRole === 'participant' && isCurrentVotingStory))) {
                     timerSection.style.display = 'block';
 
                     if (currentRole === 'facilitator') {
@@ -1503,16 +1521,23 @@
                         finishVotingBtn.style.display = 'block';
                         document.getElementById('startTimerBtn').disabled = false;
                         document.getElementById('startTimerBtn').textContent = 'Start Timer';
-                        timeRemaining = TIMER_DURATION;
                         document.getElementById('timerDisplay').textContent = '2:00';
                         document.getElementById('timerProgress').style.width = '100%';
                         document.getElementById('timerDisplay').className = 'timer-display';
                         document.getElementById('timerProgress').className = 'timer-progress';
                         stopTimer(); // Clear any running timer
                     } else {
-                        // Observers see timer but can't control it
+                        // Observers and participants see timer but can't control it
                         document.getElementById('startTimerBtn').style.display = 'none';
                         finishVotingBtn.style.display = 'none';
+
+                        // If timer is running, update the display
+                        if (story.timerStartedAt) {
+                            updateTimerDisplay(story);
+                        } else {
+                            document.getElementById('timerDisplay').textContent = '2:00';
+                            document.getElementById('timerProgress').style.width = '100%';
+                        }
                     }
                 } else {
                     timerSection.style.display = 'none';
@@ -1527,6 +1552,9 @@
                     selectEstimateText.style.display = 'none';
                     document.getElementById('voteCards').innerHTML = '';
                 }
+
+                // Clear estimate result when selecting a new story
+                document.getElementById('estimateResult').innerHTML = '';
 
                 // Show voting in progress message for observers
                 if (currentRole === 'observer' && !story.finished && isCurrentVotingStory) {
