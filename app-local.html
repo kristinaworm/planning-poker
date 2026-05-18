@@ -1277,12 +1277,13 @@
 
             // Update section title to show which story's questions these are
             const questionSectionTitle = document.querySelector('#questionsSection h3');
-            questionSectionTitle.innerHTML = `Questions & Discussion<br><span style="font-size: 14px; color: #0066b2; font-weight: 600; margin-top: 5px; display: block;">${story.title}</span>`;
+            if (questionSectionTitle) {
+                questionSectionTitle.innerHTML = `Questions & Discussion<br><span style="font-size: 14px; color: #0066b2; font-weight: 600; margin-top: 5px; display: block;">${story.title}</span>`;
+            }
 
             if (session.status === 'pending') {
                 document.getElementById('votingArea').style.display = 'none';
-            }
-            renderQuestions(story);
+                renderQuestions(story);
             } else {
                 document.getElementById('currentStoryTitle').innerHTML = titleDisplay;
                 document.getElementById('currentStoryDesc').textContent = story.description || '';
