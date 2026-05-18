@@ -1263,6 +1263,16 @@
             }
 
             const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session) {
+                showToast('Session not found', 'error');
+                return;
+            }
+
+            // Ensure stories array exists
+            if (!session.stories) {
+                session.stories = [];
+            }
+
             session.stories.push({
                 id: generateId(),
                 title: title,
