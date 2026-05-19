@@ -920,7 +920,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.9'; // Updated 2026-05-19: Pause/Resume session feature
+        const APP_VERSION = '1.0.10'; // Updated 2026-05-19: Paused sessions joinable and visible in browse
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1203,7 +1203,7 @@
             }
 
             await loadData();
-            const session = allSessions.find(s => s.code === code && (s.status === 'active' || s.status === 'pending'));
+            const session = allSessions.find(s => s.code === code && (s.status === 'active' || s.status === 'pending' || s.status === 'paused'));
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
@@ -2292,7 +2292,7 @@
         // Load sessions
         async function loadSessions() {
             await loadData();
-            const activeSessions = allSessions.filter(s => s.status === 'active' || s.status === 'pending');
+            const activeSessions = allSessions.filter(s => s.status === 'active' || s.status === 'pending' || s.status === 'paused');
             const content = document.getElementById('sessionsListContent');
 
             if (activeSessions.length === 0) {
@@ -2306,9 +2306,15 @@
                     const buttonText = isReturningUser ? 'Re-Join' : 'Join';
                     const buttonAction = isReturningUser ? `directRejoin('${s.code}')` : `fillSessionCode('${s.code}')`;
 
+                    const statusBadgeClass = s.status === 'paused' ? 'background: #fed7d7; color: #c53030;' : 'background: #c6f6d5; color: #22543d;';
+                    const statusText = s.status === 'pending' ? 'Pending' : s.status === 'active' ? 'Active' : 'Paused';
+
                     return `
                         <div class="card" style="margin-bottom: 10px;">
-                            <strong>${s.name}</strong>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                <strong>${s.name}</strong>
+                                <span style="display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; ${statusBadgeClass}">${statusText}</span>
+                            </div>
                             <p style="font-size: 12px; color: #718096; margin: 8px 0;">
                                 Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}
                             </p>
