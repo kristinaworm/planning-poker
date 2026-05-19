@@ -374,6 +374,36 @@
             flex-shrink: 0;
         }
 
+        .session-status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 12px;
+            vertical-align: middle;
+        }
+
+        .session-status-badge.pending {
+            background: #feebc8;
+            color: #c05621;
+        }
+
+        .session-status-badge.active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .session-status-badge.paused {
+            background: #fed7d7;
+            color: #c53030;
+        }
+
+        .session-status-badge.closed {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
         .vote-cards {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
@@ -920,7 +950,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.10'; // Updated 2026-05-19: Paused sessions joinable and visible in browse
+        const APP_VERSION = '1.0.12'; // Updated 2026-05-19: Session status badge displayed on session details page
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1274,7 +1304,8 @@
                 session.stories = [];
             }
 
-            document.getElementById('sessionTitle').textContent = session.name;
+            const statusText = session.status === 'pending' ? 'Pending' : session.status === 'active' ? 'Active' : session.status === 'paused' ? 'Paused' : 'Closed';
+            document.getElementById('sessionTitle').innerHTML = `${session.name} <span class="session-status-badge ${session.status}">${statusText}</span>`;
             document.getElementById('sessionStats').textContent =
                 `Code: ${session.code} | ${session.participants.length} participant(s) | ${session.stories.length} stor${session.stories.length !== 1 ? 'ies' : 'y'}`;
 
@@ -1527,8 +1558,8 @@
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session.stories.find(s => s.id === storyId);
 
-            // Check if participant is trying to browse away before voting
-            if (currentRole === 'participant' && session.currentStoryId && session.currentStoryId !== storyId) {
+            // Check if participant is trying to browse away before voting (only enforce when session is active)
+            if (session.status === 'active' && currentRole === 'participant' && session.currentStoryId && session.currentStoryId !== storyId) {
                 const currentStory = session.stories.find(s => s.id === session.currentStoryId);
                 const hasVoted = currentStory?.votes && currentStory.votes[currentUserId];
 
@@ -2385,7 +2416,7 @@
             const session = allSessions.find(s => s.id === sessionId);
             if (!session) return;
 
-            document.getElementById('sessionTitle').textContent = session.name + ' (Completed)';
+            document.getElementById('sessionTitle').innerHTML = `${session.name} <span class="session-status-badge closed">Closed</span>`;
             document.getElementById('sessionStats').textContent =
                 `Created: ${new Date(session.createdAt).toLocaleString()} | ${session.participants.length} participant(s) | ${(session.stories || []).length} stor${(session.stories || []).length !== 1 ? 'ies' : 'y'}`;
 
