@@ -466,6 +466,49 @@
             background: #f56565;
         }
 
+        .feedback-btn {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background: #0066b2;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 102, 178, 0.3);
+            z-index: 999;
+            display: none;
+            transition: all 0.3s;
+        }
+
+        .feedback-btn:hover {
+            background: #003d7a;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 102, 178, 0.4);
+        }
+
+        .feedback-item {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .feedback-meta {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+
+        .feedback-text {
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
         .estimate-result {
             text-align: center;
             padding: 20px;
@@ -625,6 +668,12 @@
                     <p>View completed and closed planning poker sessions with final estimates.</p>
                     <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">View</button>
                 </div>
+
+                <div class="card" onclick="openAdminFeedback()">
+                    <h4>📊 View Feedback</h4>
+                    <p>View all user feedback and bug reports (Admin only)</p>
+                    <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">View</button>
+                </div>
             </div>
 
     <!-- Browse Sessions Modal -->
@@ -741,6 +790,9 @@
         </div>
     </div>
 
+    <!-- Feedback Button -->
+    <button id="feedbackBtn" class="feedback-btn" onclick="openFeedbackModal()">💬 Leave feedback or report a bug</button>
+
     <!-- Create Session Modal -->
     <div class="modal" id="createSessionModal">
         <div class="modal-content">
@@ -845,9 +897,45 @@
         </div>
     </div>
 
+    <!-- Feedback Modal -->
+    <div class="modal" id="feedbackModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('feedbackModal')">✕</button>
+            <h3 style="color: #2d3748;">Leave Feedback or Report a Bug</h3>
+            <p style="color: #718096; margin-top: 5px;">Help us improve the app!</p>
+            <div style="margin-top: 20px;">
+                <div class="form-group">
+                    <label>Your Name (optional)</label>
+                    <input type="text" id="feedbackNameInput" placeholder="Leave blank to remain anonymous">
+                </div>
+                <div class="form-group">
+                    <label>Feedback / Bug Report *</label>
+                    <textarea id="feedbackTextInput" rows="6" placeholder="Tell us what you think or describe any issues..." style="resize: vertical;"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('feedbackModal')">Cancel</button>
+                    <button class="btn btn-success" onclick="submitFeedback()">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Feedback View Modal -->
+    <div class="modal" id="adminFeedbackModal">
+        <div class="modal-content" style="max-width: 900px; max-height: 85vh; overflow-y: auto;">
+            <button class="modal-close" onclick="closeModal('adminFeedbackModal')">✕</button>
+            <h3 style="color: #2d3748;">All Feedback & Bug Reports</h3>
+            <div id="feedbackListContent" style="margin-top: 20px;"></div>
+            <div class="form-actions" style="margin-top: 20px;">
+                <button class="btn btn-primary" onclick="closeModal('adminFeedbackModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Password protection
         const APP_PASSWORD = '26SNPOKER*';
+        const ADMIN_FEEDBACK_PASSWORD = 'KristinaSleep1234!';
         let isAuthenticated = false;
 
         function checkPassword() {
@@ -966,7 +1054,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.15'; // Updated 2026-05-19: Auth persists only during active sessions
+        const APP_VERSION = '1.0.19'; // Updated 2026-05-19: Unique admin password for feedback access
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1385,6 +1473,9 @@
                 deleteSessionBtn.style.display = 'none';
                 addStoryBtn.style.display = 'none';
             }
+
+            // Show feedback button for all users
+            document.getElementById('feedbackBtn').style.display = 'block';
 
             renderParticipants(session.participants);
             renderStories(session.stories);
@@ -2472,14 +2563,18 @@
             const deleteSessionBtn = document.getElementById('deleteSessionBtn');
             const startSessionBtn = document.getElementById('startSessionBtn');
             const closeSessionBtn = document.getElementById('closeSessionBtn');
+            const pauseResumeBtn = document.getElementById('pauseResumeBtn');
             const addStoryBtn = document.getElementById('addStoryBtn');
             const questionFormArea = document.getElementById('questionFormArea');
+            const feedbackBtn = document.getElementById('feedbackBtn');
 
             // Hide all session control buttons and question form (read-only)
             startSessionBtn.style.display = 'none';
             closeSessionBtn.style.display = 'none';
+            pauseResumeBtn.style.display = 'none';
             addStoryBtn.style.display = 'none';
             questionFormArea.style.display = 'none';
+            feedbackBtn.style.display = 'none';
 
             // Show share and delete for facilitators
             shareSessionBtn.style.display = currentRole === 'facilitator' ? 'block' : 'none';
@@ -2565,7 +2660,9 @@
             const participant = session.participants.find(p => p.id === storedUserId);
 
             if (!participant) {
-                showToast('User not found in session', 'error');
+                // User was removed or no longer in session - fall back to normal join flow
+                localStorage.removeItem(storageKey);
+                fillSessionCode(code);
                 return;
             }
 
@@ -2655,6 +2752,7 @@
             // Clear authentication when leaving session
             localStorage.removeItem('planningPokerAuth');
             localStorage.removeItem('pendingAuthCheck');
+            document.getElementById('feedbackBtn').style.display = 'none';
             document.querySelector('.home-view').classList.add('active');
             document.querySelector('.session-view').classList.remove('active');
             document.getElementById('sessionsList').style.display = 'none';
@@ -2666,6 +2764,102 @@
             toast.textContent = message;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Feedback functions
+        function openFeedbackModal() {
+            document.getElementById('feedbackNameInput').value = '';
+            document.getElementById('feedbackTextInput').value = '';
+            document.getElementById('feedbackModal').classList.add('active');
+            document.getElementById('feedbackTextInput').focus();
+        }
+
+        async function submitFeedback() {
+            const feedbackText = document.getElementById('feedbackTextInput').value.trim();
+            if (!feedbackText) {
+                showToast('Please enter your feedback', 'error');
+                return;
+            }
+
+            const participantName = document.getElementById('feedbackNameInput').value.trim();
+            const anonymous = !participantName;
+
+            const session = allSessions.find(s => s.id === currentSessionId) || {};
+            const feedback = {
+                id: generateId(),
+                timestamp: Date.now(),
+                sessionCode: session.code || 'N/A',
+                sessionName: session.name || 'N/A',
+                participantName: participantName || 'Anonymous',
+                feedbackText: feedbackText,
+                anonymous: anonymous,
+                userRole: currentRole || 'viewer'
+            };
+
+            try {
+                await firebasePost('feedback', feedback);
+                showToast('Thank you for your feedback!');
+                closeModal('feedbackModal');
+            } catch (error) {
+                console.log('Firebase not available, saving to localStorage');
+                let allFeedback = JSON.parse(localStorage.getItem('planningPokerFeedback') || '[]');
+                allFeedback.push(feedback);
+                localStorage.setItem('planningPokerFeedback', JSON.stringify(allFeedback));
+                showToast('Thank you for your feedback!');
+                closeModal('feedbackModal');
+            }
+        }
+
+        async function openAdminFeedback() {
+            const password = prompt('Enter admin password to view feedback:');
+            if (!password) return;
+
+            if (password !== ADMIN_FEEDBACK_PASSWORD) {
+                showToast('Incorrect password', 'error');
+                return;
+            }
+
+            try {
+                const feedbackData = await firebaseGet('feedback');
+                const feedbackArray = feedbackData ? Object.values(feedbackData) : [];
+                renderFeedback(feedbackArray);
+            } catch (error) {
+                console.log('Firebase not available, loading from localStorage');
+                const feedbackArray = JSON.parse(localStorage.getItem('planningPokerFeedback') || '[]');
+                renderFeedback(feedbackArray);
+            }
+
+            document.getElementById('adminFeedbackModal').classList.add('active');
+        }
+
+        function renderFeedback(feedbackArray) {
+            const content = document.getElementById('feedbackListContent');
+
+            if (feedbackArray.length === 0) {
+                content.innerHTML = '<p style="text-align: center; color: #718096; padding: 20px;">No feedback yet</p>';
+                return;
+            }
+
+            const sorted = feedbackArray.sort((a, b) => b.timestamp - a.timestamp);
+
+            content.innerHTML = sorted.map(fb => {
+                const date = new Date(fb.timestamp).toLocaleString();
+                const nameDisplay = fb.anonymous ? '<em style="color: #a0aec0;">Anonymous</em>' : fb.participantName;
+                const roleDisplay = `<span style="background: #cbd5e0; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">${fb.userRole || 'viewer'}</span>`;
+
+                return `
+                    <div class="feedback-item">
+                        <div class="feedback-meta">
+                            <strong>${nameDisplay}</strong> ${roleDisplay}
+                            <br>
+                            <span style="color: #a0aec0; font-size: 11px;">
+                                ${date} • Session: ${fb.sessionName} (${fb.sessionCode})
+                            </span>
+                        </div>
+                        <div class="feedback-text">${fb.feedbackText}</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         // Initialize
