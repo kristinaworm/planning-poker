@@ -854,6 +854,13 @@
             const password = document.getElementById('passwordInput').value;
             if (password === APP_PASSWORD) {
                 isAuthenticated = true;
+                // Only persist auth if entering an active session
+                const params = new URLSearchParams(window.location.search);
+                const joinCode = params.get('joinSession');
+                if (joinCode) {
+                    // Will set auth persistence when session status is determined
+                    localStorage.setItem('pendingAuthCheck', 'true');
+                }
                 document.getElementById('passwordModal').classList.remove('active');
                 document.getElementById('appContainer').style.display = 'block';
                 showToast('Access granted!');
@@ -924,6 +931,12 @@
             // Display app version
             document.getElementById('versionDisplay').textContent = `v${APP_VERSION}`;
 
+            // Check if user was already authenticated
+            if (localStorage.getItem('planningPokerAuth') === 'true') {
+                isAuthenticated = true;
+                document.getElementById('appContainer').style.display = 'block';
+            }
+
             // Start checking for updates
             startVersionCheck();
 
@@ -953,7 +966,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.13'; // Updated 2026-05-19: Auto-refresh when new version detected
+        const APP_VERSION = '1.0.15'; // Updated 2026-05-19: Auth persists only during active sessions
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1331,6 +1344,14 @@
             document.getElementById('sessionTitle').innerHTML = `${session.name} <span class="session-status-badge ${session.status}">${statusText}</span>`;
             document.getElementById('sessionStats').textContent =
                 `Code: ${session.code} | ${session.participants.length} participant(s) | ${session.stories.length} stor${session.stories.length !== 1 ? 'ies' : 'y'}`;
+
+            // Persist authentication only during active sessions
+            if (session.status === 'active') {
+                localStorage.setItem('planningPokerAuth', 'true');
+                localStorage.removeItem('pendingAuthCheck');
+            } else {
+                localStorage.removeItem('planningPokerAuth');
+            }
 
             // Show facilitator-only buttons
             const startSessionBtn = document.getElementById('startSessionBtn');
@@ -2631,6 +2652,9 @@
             currentSessionId = null;
             currentUserId = null;
             currentRole = null;
+            // Clear authentication when leaving session
+            localStorage.removeItem('planningPokerAuth');
+            localStorage.removeItem('pendingAuthCheck');
             document.querySelector('.home-view').classList.add('active');
             document.querySelector('.session-view').classList.remove('active');
             document.getElementById('sessionsList').style.display = 'none';
