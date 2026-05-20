@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.34'; // Updated 2026-05-20: Added edit button to Final Estimate display
+        const APP_VERSION = '1.0.38'; // Updated 2026-05-20: Auto-carry participants to new sessions when moving stories
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1912,10 +1912,14 @@
                     // Show estimate result for finished stories
                     const estimate = story.estimate;
                     if (estimate !== null && estimate !== undefined) {
+                        const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>` : '';
                         document.getElementById('estimateResult').innerHTML = `
                             <div class="estimate-result">
                                 <h4>✓ Final Estimate</h4>
-                                <div class="estimate-value">${estimate}</div>
+                                <div style="display: flex; align-items: center;">
+                                    <div class="estimate-value">${estimate}</div>
+                                    ${manualIndicator}
+                                </div>
                                 ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${storyId}', '${estimate}')">✏️ Edit</button>` : ''}
                             </div>
                         `;
@@ -2109,6 +2113,7 @@
 
             story.estimate = estimate;
             story.finished = true;
+            story.estimateManuallyChanged = false;
             await saveData();
 
             // Hide voting controls
@@ -2169,6 +2174,7 @@
 
             stopAutoRefresh();
             story.estimate = newEstimate;
+            story.estimateManuallyChanged = true;
             await saveData();
 
             document.getElementById('estimateResult').innerHTML = `
@@ -2681,27 +2687,34 @@
 
             let summaryHtml = '';
 
-            // Display labeled groups first
-            Object.keys(labelGroups).sort().forEach(label => {
+            // Display labeled groups first (collapsible)
+            Object.keys(labelGroups).sort().forEach((label, idx) => {
                 const stories = labelGroups[label];
                 const estimates = stories.map(s => Number(s.estimate)).filter(e => !isNaN(e));
                 const total = estimates.reduce((a, b) => a + b, 0);
                 const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+                const uniqueId = `label-${idx}`;
 
                 summaryHtml += `
                     <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #9f7aea;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="font-size: 16px;">📌 ${escapeHtml(label)}</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; cursor: pointer;" onclick="toggleSummarySection('${uniqueId}')">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <span style="font-size: 16px;" id="${uniqueId}-chevron">▶</span>
+                                <strong style="font-size: 16px;">📌 ${escapeHtml(label)}</strong>
+                            </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
                                 <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                        <div id="${uniqueId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
                             ${stories.map(s => `
                                 <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; font-size: 13px;">
                                     <span style="flex: 1;">${escapeHtml(s.title)}</span>
-                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
+                                        ${s.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 4px; border-radius: 2px; font-size: 9px; font-weight: 600;">✏️</span>` : ''}
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -2709,26 +2722,33 @@
                 `;
             });
 
-            // Display unlabeled stories if any
+            // Display unlabeled stories if any (collapsible)
             if (unlabeled.length > 0) {
                 const estimates = unlabeled.map(s => Number(s.estimate)).filter(e => !isNaN(e));
                 const total = estimates.reduce((a, b) => a + b, 0);
                 const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+                const unlabeledId = 'label-unlabeled';
 
                 summaryHtml += `
                     <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #cbd5e0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="font-size: 16px;">No Label</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; cursor: pointer;" onclick="toggleSummarySection('${unlabeledId}')">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <span style="font-size: 16px;" id="${unlabeledId}-chevron">▶</span>
+                                <strong style="font-size: 16px;">No Label</strong>
+                            </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
                                 <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                        <div id="${unlabeledId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
                             ${unlabeled.map(s => `
                                 <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; font-size: 13px;">
                                     <span style="flex: 1;">${escapeHtml(s.title)}</span>
-                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
+                                        ${s.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 4px; border-radius: 2px; font-size: 9px; font-weight: 600;">✏️</span>` : ''}
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -2783,30 +2803,37 @@
 
             let summaryHtml = `<p style="text-align: center; color: #718096; font-size: 12px; margin-bottom: 15px;">Aggregated from ${closedSessions.length} closed session(s) | ${estimatedStories.length} estimated stories</p>`;
 
-            // Display labeled groups first
-            Object.keys(labelGroups).sort().forEach(label => {
+            // Display labeled groups first (collapsible)
+            Object.keys(labelGroups).sort().forEach((label, idx) => {
                 const stories = labelGroups[label];
                 const estimates = stories.map(s => Number(s.estimate)).filter(e => !isNaN(e));
                 const total = estimates.reduce((a, b) => a + b, 0);
                 const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+                const uniqueId = `cross-label-${idx}`;
 
                 summaryHtml += `
                     <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #9f7aea;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="font-size: 16px;">📌 ${escapeHtml(label)}</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; cursor: pointer;" onclick="toggleSummarySection('${uniqueId}')">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <span style="font-size: 16px;" id="${uniqueId}-chevron">▶</span>
+                                <strong style="font-size: 16px;">📌 ${escapeHtml(label)}</strong>
+                            </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
                                 <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                        <div id="${uniqueId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
                             ${stories.map(s => `
                                 <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px;">
                                     <span style="flex: 1;">
                                         ${escapeHtml(s.title)}
                                         <span style="color: #718096; font-size: 11px; display: block; margin-top: 2px;">${escapeHtml(s.sessionName)}</span>
                                     </span>
-                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center; flex-shrink: 0;">${escapeHtml(s.estimate)}</span>
+                                    <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
+                                        <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
+                                        ${s.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 4px; border-radius: 2px; font-size: 9px; font-weight: 600;">✏️</span>` : ''}
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -2814,29 +2841,36 @@
                 `;
             });
 
-            // Display unlabeled stories if any
+            // Display unlabeled stories if any (collapsible)
             if (unlabeled.length > 0) {
                 const estimates = unlabeled.map(s => Number(s.estimate)).filter(e => !isNaN(e));
                 const total = estimates.reduce((a, b) => a + b, 0);
                 const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+                const unlabeledId = 'cross-label-unlabeled';
 
                 summaryHtml += `
                     <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #cbd5e0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <strong style="font-size: 16px;">No Label</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; cursor: pointer;" onclick="toggleSummarySection('${unlabeledId}')">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                                <span style="font-size: 16px;" id="${unlabeledId}-chevron">▶</span>
+                                <strong style="font-size: 16px;">No Label</strong>
+                            </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
                                 <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
-                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                        <div id="${unlabeledId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
                             ${unlabeled.map(s => `
                                 <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px;">
                                     <span style="flex: 1;">
                                         ${escapeHtml(s.title)}
                                         <span style="color: #718096; font-size: 11px; display: block; margin-top: 2px;">${escapeHtml(s.sessionName)}</span>
                                     </span>
-                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center; flex-shrink: 0;">${escapeHtml(s.estimate)}</span>
+                                    <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
+                                        <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
+                                        ${s.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 4px; border-radius: 2px; font-size: 9px; font-weight: 600;">✏️</span>` : ''}
+                                    </div>
                                 </div>
                             `).join('')}
                         </div>
@@ -2846,6 +2880,16 @@
 
             document.getElementById('summaryContent').innerHTML = summaryHtml;
             document.getElementById('sessionSummaryModal').classList.add('active');
+        }
+
+        function toggleSummarySection(sectionId) {
+            const content = document.getElementById(`${sectionId}-content`);
+            const chevron = document.getElementById(`${sectionId}-chevron`);
+            if (content) {
+                const isHidden = content.style.display === 'none';
+                content.style.display = isHidden ? 'block' : 'none';
+                chevron.textContent = isHidden ? '▼' : '▶';
+            }
         }
 
         // Load sessions
@@ -3088,14 +3132,22 @@
 
             // Create new session
             const newSessionId = generateId();
-            const code = generateCode();
+            let code = generateCode();
+
+            // Ask if user wants to keep the same session code
+            const oldCode = session.code;
+            const useOldCode = confirm(`Keep the same session code "${oldCode}" for the new session?\n\nClick OK to reuse, Cancel to create a new code.`);
+            if (useOldCode) {
+                code = oldCode;
+            }
+
             const newSession = {
                 id: newSessionId,
                 code: code,
                 name: newSessionName,
                 createdAt: new Date().toISOString(),
                 status: 'pending',
-                participants: [],
+                participants: session.participants,
                 stories: copiesToMove,
                 currentStoryId: null
             };
@@ -3104,7 +3156,7 @@
             await saveData();
 
             closeModal('moveStoriesModal');
-            showToast(`Created session "${newSessionName}" with ${copiesToMove.length} stories`);
+            showToast(`Created session "${newSessionName}" with ${copiesToMove.length} stories${useOldCode ? ' (same code)' : ''}`);
 
             // Ask if user wants to join the new session
             if (confirm(`Would you like to join the new session "${newSessionName}"?`)) {
