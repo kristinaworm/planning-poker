@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.44'; // Updated 2026-05-20: Fixed duplicate facilitator, moved stories display, label selection
+        const APP_VERSION = '1.0.47'; // Updated 2026-05-20: Fixed duplicate facilitator bug by properly copying participants array
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1551,6 +1551,12 @@
 
             // Show feedback button for all users
             document.getElementById('feedbackBtn').style.display = 'block';
+
+            // Hide past session buttons (summary and move stories) for active sessions
+            const summaryBtn = document.getElementById('summaryBtn');
+            const moveStoriesBtn = document.getElementById('moveStoriesBtn');
+            if (summaryBtn) summaryBtn.style.display = 'none';
+            if (moveStoriesBtn) moveStoriesBtn.style.display = 'none';
 
             renderParticipants(session.participants);
             renderStories(session.stories);
@@ -2873,7 +2879,44 @@
                 }
             });
 
+            const labels = Object.keys(labelGroups).sort();
+            const hasUnlabeled = unlabeled.length > 0;
+
+            // Store the data for label selection
+            window.currentSummaryData = {
+                labelGroups,
+                unlabeled,
+                labels,
+                hasUnlabeled
+            };
+
             let summaryHtml = `<p style="text-align: center; color: #718096; font-size: 12px; margin-bottom: 15px;">Aggregated from ${closedSessions.length} closed session(s) | ${estimatedStories.length} estimated stories</p>`;
+
+            // Add label selection section
+            if (labels.length > 0 || hasUnlabeled) {
+                summaryHtml += `
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0;">
+                        <div style="font-weight: 600; margin-bottom: 12px; color: #2d3748;">Select labels to calculate combined total:</div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                            ${labels.map((label, idx) => `
+                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
+                                    <input type="checkbox" class="label-selector" value="${idx}" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
+                                    <span style="font-size: 13px;">📌 ${escapeHtml(label)}</span>
+                                </label>
+                            `).join('')}
+                            ${hasUnlabeled ? `
+                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
+                                    <input type="checkbox" class="label-selector" value="unlabeled" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
+                                    <span style="font-size: 13px;">No Label</span>
+                                </label>
+                            ` : ''}
+                        </div>
+                        <div style="background: white; padding: 10px; border-radius: 4px; text-align: center;">
+                            <span style="font-weight: 600; color: #2d3748;">Combined Total: <span id="combinedTotal" style="color: #667eea; font-size: 16px;">0</span></span>
+                        </div>
+                    </div>
+                `;
+            }
 
             // Display labeled groups first (collapsible)
             Object.keys(labelGroups).sort().forEach((label, idx) => {
@@ -3192,13 +3235,14 @@
                     title: story.title,
                     votes: {},
                     estimate: null,
-                    questions: [],
+                    questions: story.questions ? [...story.questions] : [],
                     votingStarted: false,
                     finished: false,
                     jiraLink: story.jiraLink || null,
                     jiraKey: story.jiraKey || null,
                     label: story.label || null,
-                    timerStartedAt: null
+                    timerStartedAt: null,
+                    description: story.description || null
                 }));
 
             // Create new session
@@ -3213,7 +3257,7 @@
             }
 
             // If keeping old code, copy all participants; if new code, start fresh
-            const newParticipants = useOldCode ? session.participants : [];
+            const newParticipants = useOldCode ? [...session.participants] : [];
 
             const newSession = {
                 id: newSessionId,
@@ -3238,20 +3282,24 @@
                 currentSessionId = newSessionId;
                 currentRole = 'facilitator';
 
-                // If we copied participants and current user is already in the session, don't add them again
-                const currentUserInNewSession = newSession.participants.find(p => p.id === currentUserId);
-                if (currentUserInNewSession) {
-                    // User already exists in new session (from copied participants)
-                    // Keep their existing ID and role
-                } else if (useOldCode && newSession.participants.length > 0) {
-                    // Participants were copied but current user isn't there (edge case)
-                    // Just use the current user ID as-is, they'll be added implicitly
+                // Deduplicate facilitators if somehow there are multiple
+                const facilitators = newSession.participants.filter(p => p.role === 'facilitator');
+                if (facilitators.length > 1) {
+                    // Keep only the first facilitator, remove duplicates
+                    const firstFacilitator = facilitators[0];
+                    newSession.participants = newSession.participants.filter(p =>
+                        p.role !== 'facilitator' || p.id === firstFacilitator.id
+                    );
+                    currentUserId = firstFacilitator.id;
+                } else if (facilitators.length === 1) {
+                    // One facilitator exists, use it
+                    currentUserId = facilitators[0].id;
                 } else {
-                    // No participants copied (new code), so prompt for name
-                    currentUserId = generateId();
+                    // No facilitator exists, add current user as facilitator
                     const userName = prompt('Your name:', 'Facilitator');
                     if (!userName) return;
 
+                    currentUserId = generateId();
                     newSession.participants.push({
                         id: currentUserId,
                         name: userName,
