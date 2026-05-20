@@ -1095,7 +1095,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.26'; // Updated 2026-05-20: QA fixes for labels/summary feature
+        const APP_VERSION = '1.0.29'; // Updated 2026-05-20: Fixed uniform estimate box sizing in session summary
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1609,7 +1609,7 @@
 
                 // Display label if available
                 const labelDisplay = story.label ?
-                    `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-right: 6px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
+                    `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
                     '';
 
                 const resetBtn = story.estimate ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 12px; flex: 1; background: #ed8936;" onclick="resetStory('${story.id}'); event.stopPropagation();">↻ Reset</button>` : '';
@@ -1630,8 +1630,11 @@
                 return `
                     <div class="story-item ${draggableClass} ${currentVotingClass}" data-story-id="${story.id}" data-story-index="${index}" ${draggableAttr}
                          onclick="selectStory('${story.id}')">
-                        <div class="story-title">${jiraDisplay}${labelDisplay}${story.title}${unreadBadge}</div>
-                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
+                        <div class="story-title">${jiraDisplay}${story.title}${unreadBadge}</div>
+                        <div style="display: flex; gap: 6px; margin-top: 6px;">
+                            ${labelDisplay}
+                            <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
+                        </div>
                         ${actionButtons}
                     </div>
                 `;
@@ -2642,9 +2645,9 @@
                         </div>
                         <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
                             ${stories.map(s => `
-                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 13px;">
-                                    <span>${escapeHtml(s.title)}</span>
-                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px;">${escapeHtml(s.estimate)}</span>
+                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; font-size: 13px;">
+                                    <span style="flex: 1;">${escapeHtml(s.title)}</span>
+                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -2669,9 +2672,9 @@
                         </div>
                         <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
                             ${unlabeled.map(s => `
-                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 13px;">
-                                    <span>${escapeHtml(s.title)}</span>
-                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px;">${escapeHtml(s.estimate)}</span>
+                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: center; font-size: 13px;">
+                                    <span style="flex: 1;">${escapeHtml(s.title)}</span>
+                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center;">${escapeHtml(s.estimate)}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -2842,12 +2845,15 @@
 
             list.innerHTML = stories.map(story => {
                 const labelDisplay = story.label ?
-                    `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-right: 6px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
+                    `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
                     '';
                 return `
                     <div class="story-item" onclick="selectPastStory('${story.id}')">
-                        <div class="story-title">${labelDisplay}${escapeHtml(story.title)}</div>
-                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>
+                        <div class="story-title">${escapeHtml(story.title)}</div>
+                        <div style="display: flex; gap: 6px; margin-top: 6px;">
+                            ${labelDisplay}
+                            <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>
+                        </div>
                     </div>
                 `;
             }).join('');
