@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.33'; // Updated 2026-05-20: Added move un-estimated stories to new session
+        const APP_VERSION = '1.0.34'; // Updated 2026-05-20: Added edit button to Final Estimate display
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1916,6 +1916,7 @@
                             <div class="estimate-result">
                                 <h4>✓ Final Estimate</h4>
                                 <div class="estimate-value">${estimate}</div>
+                                ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${storyId}', '${estimate}')">✏️ Edit</button>` : ''}
                             </div>
                         `;
                     }
