@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.43'; // Updated 2026-05-20: Moved manual indicator to appear next to Final Estimate title
+        const APP_VERSION = '1.0.44'; // Updated 2026-05-20: Fixed duplicate facilitator, moved stories display, label selection
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -3238,12 +3238,16 @@
                 currentSessionId = newSessionId;
                 currentRole = 'facilitator';
 
-                // If we copied participants and user is already in the session, don't add them again
-                const currentUserInNewSession = newSession.participants.find(p => p.role === 'facilitator');
+                // If we copied participants and current user is already in the session, don't add them again
+                const currentUserInNewSession = newSession.participants.find(p => p.id === currentUserId);
                 if (currentUserInNewSession) {
-                    currentUserId = currentUserInNewSession.id;
+                    // User already exists in new session (from copied participants)
+                    // Keep their existing ID and role
+                } else if (useOldCode && newSession.participants.length > 0) {
+                    // Participants were copied but current user isn't there (edge case)
+                    // Just use the current user ID as-is, they'll be added implicitly
                 } else {
-                    // Only add new participant if they're not already there
+                    // No participants copied (new code), so prompt for name
                     currentUserId = generateId();
                     const userName = prompt('Your name:', 'Facilitator');
                     if (!userName) return;
