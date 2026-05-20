@@ -923,7 +923,7 @@
         <div class="modal-content">
             <button class="modal-close" onclick="closeModal('feedbackModal')">✕</button>
             <h3 style="color: #2d3748;">Leave Feedback or Report a Bug</h3>
-            <p style="color: #718096; margin-top: 5px;">Help us improve the app!</p>
+            <p style="color: #718096; margin-top: 5px;">Help Kristina improve the app!</p>
             <div style="margin-top: 20px;">
                 <div class="form-group">
                     <label>Your Name (optional)</label>
@@ -1075,7 +1075,14 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.20'; // Updated 2026-05-20: Unread feedback indicator badge
+        const APP_VERSION = '1.0.21'; // Updated 2026-05-20: XSS fixes, race condition fixes, vote count fix
+
+        // HTML escape function to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
         // Firebase REST API calls
         async function firebaseGet(path) {
@@ -1658,7 +1665,7 @@
 
                 // Check if all participants have voted
                 const votes = story.votes || {};
-                const participants = session.participants.filter(p => p.role !== 'observer').length;
+                const participants = session.participants.filter(p => p.role === 'participant').length;
                 if (Object.keys(votes).length >= participants && timeRemaining > 0) {
                     clearInterval(timerInterval);
                     timerInterval = null;
@@ -1971,7 +1978,7 @@
                     const isOwnVote = userId === currentUserId;
                     return `
                         <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-                            <span>${isOwnVote ? 'Your vote' : (participant?.name || 'Unknown')}</span>
+                            <span>${isOwnVote ? 'Your vote' : escapeHtml(participant?.name || 'Unknown')}</span>
                             <span style="background: #0066b2; color: white; padding: 4px 12px; border-radius: 4px;">${value}</span>
                         </div>
                     `;
@@ -2060,9 +2067,7 @@
             showToast(`Estimate: ${estimate}`);
 
             // Update story list to reflect estimate
-            await loadData();
-            const updatedSession = allSessions.find(s => s.id === currentSessionId);
-            renderStories(updatedSession.stories);
+            renderStories(session.stories);
 
             // Resume auto-refresh
             startAutoRefresh();
@@ -2231,18 +2236,18 @@
                 const date = new Date(q.timestamp);
                 const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const deleteBtn = currentRole === 'facilitator' ?
-                    `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="deleteQuestion('${story.id}', '${q.id}'); event.stopPropagation();">✕</button>` : '';
+                    `<button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="deleteQuestion('${escapeHtml(story.id)}', '${escapeHtml(q.id)}'); event.stopPropagation();">✕</button>` : '';
 
                 return `
                     <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #0066b2;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="font-weight: 600; color: #2d3748;">${q.authorName}</span>
+                            <span style="font-weight: 600; color: #2d3748;">${escapeHtml(q.authorName)}</span>
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <span style="color: #a0aec0; font-size: 12px;">${timeStr}</span>
                                 ${deleteBtn}
                             </div>
                         </div>
-                        <p style="color: #4a5568; margin: 0;">${q.text}</p>
+                        <p style="color: #4a5568; margin: 0;">${escapeHtml(q.text)}</p>
                     </div>
                 `;
             }).join('');
@@ -2410,9 +2415,6 @@
                 story.votingStarted = false;
                 story.timerStartedAt = null;
                 await saveData();
-
-                // Reload data to ensure consistency
-                await loadData();
 
                 selectStory(storyId);
                 const updatedSession = allSessions.find(s => s.id === currentSessionId);
@@ -2846,7 +2848,8 @@
                 const feedbackData = await firebaseGet('feedback');
                 let feedbackArray = feedbackData ? Object.values(feedbackData) : [];
                 feedbackArray = feedbackArray.map(fb => ({...fb, isRead: true}));
-                await firebaseSet('feedback', feedbackArray);
+                const feedbackObj = Object.fromEntries(feedbackArray.map((fb, i) => [i.toString(), fb]));
+                await firebasePut('feedback', feedbackObj);
                 renderFeedback(feedbackArray);
             } catch (error) {
                 console.log('Firebase not available, loading from localStorage');
@@ -2896,8 +2899,8 @@
 
             content.innerHTML = sorted.map(fb => {
                 const date = new Date(fb.timestamp).toLocaleString();
-                const nameDisplay = fb.anonymous ? '<em style="color: #a0aec0;">Anonymous</em>' : fb.participantName;
-                const roleDisplay = `<span style="background: #cbd5e0; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">${fb.userRole || 'viewer'}</span>`;
+                const nameDisplay = fb.anonymous ? '<em style="color: #a0aec0;">Anonymous</em>' : escapeHtml(fb.participantName);
+                const roleDisplay = `<span style="background: #cbd5e0; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">${escapeHtml(fb.userRole || 'viewer')}</span>`;
                 const unreadClass = fb.isRead === false ? 'unread' : '';
 
                 return `
@@ -2906,10 +2909,10 @@
                             <strong>${nameDisplay}</strong> ${roleDisplay}
                             <br>
                             <span style="color: #a0aec0; font-size: 11px;">
-                                ${date} • Session: ${fb.sessionName} (${fb.sessionCode})
+                                ${date} • Session: ${escapeHtml(fb.sessionName)} (${escapeHtml(fb.sessionCode)})
                             </span>
                         </div>
-                        <div class="feedback-text">${fb.feedbackText}</div>
+                        <div class="feedback-text">${escapeHtml(fb.feedbackText)}</div>
                     </div>
                 `;
             }).join('');
