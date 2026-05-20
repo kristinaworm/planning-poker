@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.39'; // Updated 2026-05-20: Fixed missing manual edit indicator in past sessions view
+        const APP_VERSION = '1.0.41'; // Updated 2026-05-20: Added questions indicator and reordered story tags
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1642,6 +1642,11 @@
                     `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
                     '';
 
+                // Display questions indicator if there are questions
+                const questionsIndicator = (story.questions && story.questions.length > 0) ?
+                    `<span style="display: inline-block; background: #cbd5e0; color: #2d3748; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">💬 Questions</span>` :
+                    '';
+
                 const resetBtn = story.estimate ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 12px; flex: 1; background: #ed8936;" onclick="resetStory('${story.id}'); event.stopPropagation();">↻ Reset</button>` : '';
                 const actionButtons = currentRole === 'facilitator' ? `
                     <div style="display: flex; gap: 5px; margin-top: 8px;">
@@ -1662,8 +1667,9 @@
                          onclick="selectStory('${story.id}')">
                         <div class="story-title">${jiraDisplay}${story.title}${unreadBadge}</div>
                         <div style="display: flex; gap: 6px; margin-top: 6px;">
-                            ${labelDisplay}
                             <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
+                            ${labelDisplay}
+                            ${questionsIndicator}
                         </div>
                         ${actionButtons}
                     </div>
@@ -2128,7 +2134,9 @@
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
                     <h4>✓ Voting Complete</h4>
-                    <div class="estimate-value">${estimate}</div>
+                    <div style="display: flex; align-items: center;">
+                        <div class="estimate-value">${estimate}</div>
+                    </div>
                     ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${currentSelectedStoryId}', '${estimate}')">✏️ Edit</button>` : ''}
                 </div>
             `;
@@ -2180,7 +2188,10 @@
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
                     <h4>✓ Voting Complete</h4>
-                    <div class="estimate-value">${newEstimate}</div>
+                    <div style="display: flex; align-items: center;">
+                        <div class="estimate-value">${newEstimate}</div>
+                        <span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>
+                    </div>
                     ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${newEstimate}')">✏️ Edit</button>` : ''}
                 </div>
             `;
@@ -2226,10 +2237,14 @@
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session?.stories.find(s => s.id === storyId);
             if (story) {
+                const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>` : '';
                 document.getElementById('estimateResult').innerHTML = `
                     <div class="estimate-result">
                         <h4>✓ Voting Complete</h4>
-                        <div class="estimate-value">${story.estimate}</div>
+                        <div style="display: flex; align-items: center;">
+                            <div class="estimate-value">${story.estimate}</div>
+                            ${manualIndicator}
+                        </div>
                         ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${story.estimate}')">✏️ Edit</button>` : ''}
                     </div>
                 `;
@@ -3197,12 +3212,16 @@
                 const labelDisplay = story.label ?
                     `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
                     '';
+                const questionsIndicator = (story.questions && story.questions.length > 0) ?
+                    `<span style="display: inline-block; background: #cbd5e0; color: #2d3748; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">💬 Questions</span>` :
+                    '';
                 return `
                     <div class="story-item" onclick="selectPastStory('${story.id}')">
                         <div class="story-title">${escapeHtml(story.title)}</div>
                         <div style="display: flex; gap: 6px; margin-top: 6px;">
-                            ${labelDisplay}
                             <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>
+                            ${labelDisplay}
+                            ${questionsIndicator}
                         </div>
                     </div>
                 `;
