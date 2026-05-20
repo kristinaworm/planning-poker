@@ -2697,14 +2697,50 @@
                 }
             });
 
+            const labels = Object.keys(labelGroups).sort();
+            const hasUnlabeled = unlabeled.length > 0;
+
+            // Store the data for label selection
+            window.currentSummaryData = {
+                labelGroups,
+                unlabeled,
+                labels,
+                hasUnlabeled
+            };
+
             let summaryHtml = '';
 
+            // Add label selection section
+            if (labels.length > 0 || hasUnlabeled) {
+                summaryHtml += `
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0;">
+                        <div style="font-weight: 600; margin-bottom: 12px; color: #2d3748;">Select labels to calculate combined total:</div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
+                            ${labels.map((label, idx) => `
+                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
+                                    <input type="checkbox" class="label-selector" value="${idx}" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
+                                    <span style="font-size: 13px;">📌 ${escapeHtml(label)}</span>
+                                </label>
+                            `).join('')}
+                            ${hasUnlabeled ? `
+                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
+                                    <input type="checkbox" class="label-selector" value="unlabeled" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
+                                    <span style="font-size: 13px;">No Label</span>
+                                </label>
+                            ` : ''}
+                        </div>
+                        <div style="background: white; padding: 10px; border-radius: 4px; text-align: center;">
+                            <span style="font-weight: 600; color: #2d3748;">Combined Total: <span id="combinedTotal" style="color: #667eea; font-size: 16px;">0</span></span>
+                        </div>
+                    </div>
+                `;
+            }
+
             // Display labeled groups first (collapsible)
-            Object.keys(labelGroups).sort().forEach((label, idx) => {
+            labels.forEach((label, idx) => {
                 const stories = labelGroups[label];
                 const estimates = stories.map(s => Number(s.estimate)).filter(e => !isNaN(e));
                 const total = estimates.reduce((a, b) => a + b, 0);
-                const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
                 const uniqueId = `label-${idx}`;
 
                 summaryHtml += `
@@ -2716,7 +2752,6 @@
                             </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
-                                <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
                         <div id="${uniqueId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
@@ -2735,10 +2770,9 @@
             });
 
             // Display unlabeled stories if any (collapsible)
-            if (unlabeled.length > 0) {
+            if (hasUnlabeled) {
                 const estimates = unlabeled.map(s => Number(s.estimate)).filter(e => !isNaN(e));
                 const total = estimates.reduce((a, b) => a + b, 0);
-                const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
                 const unlabeledId = 'label-unlabeled';
 
                 summaryHtml += `
@@ -2750,7 +2784,6 @@
                             </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
-                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
                         <div id="${unlabeledId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
@@ -2770,6 +2803,33 @@
 
             document.getElementById('summaryContent').innerHTML = summaryHtml;
             document.getElementById('sessionSummaryModal').classList.add('active');
+        }
+
+        function updateSummaryCombinedTotal() {
+            const data = window.currentSummaryData;
+            if (!data) return;
+
+            const checkboxes = document.querySelectorAll('.label-selector:checked');
+            let combinedTotal = 0;
+
+            checkboxes.forEach(cb => {
+                const value = cb.value;
+                let stories = [];
+
+                if (value === 'unlabeled') {
+                    stories = data.unlabeled;
+                } else {
+                    const idx = parseInt(value);
+                    const label = data.labels[idx];
+                    stories = data.labelGroups[label] || [];
+                }
+
+                const estimates = stories.map(s => Number(s.estimate)).filter(e => !isNaN(e));
+                const total = estimates.reduce((a, b) => a + b, 0);
+                combinedTotal += total;
+            });
+
+            document.getElementById('combinedTotal').textContent = combinedTotal;
         }
 
         function showCrossSessionSummary() {
@@ -2832,7 +2892,6 @@
                             </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
-                                <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
                         <div id="${uniqueId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
@@ -2869,7 +2928,6 @@
                             </div>
                             <div style="display: flex; gap: 15px;">
                                 <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
-                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
                             </div>
                         </div>
                         <div id="${unlabeledId}-content" style="background: #f7fafc; padding: 10px; border-radius: 4px; margin-top: 10px; display: none;">
@@ -3045,10 +3103,11 @@
             }
             summaryBtn.style.display = 'block';
 
-            // Create and inject a move stories button if there are un-estimated stories
+            // Create and inject a move stories button only for closed/active sessions with un-estimated stories
             const unestimatedStories = session.stories.filter(s => !s.estimate || s.estimate === null || s.estimate === undefined);
             let moveStoriesBtn = document.getElementById('moveStoriesBtn');
-            if (unestimatedStories.length > 0) {
+            // Only show Move Stories button for closed sessions (past sessions view), not for pending sessions
+            if (unestimatedStories.length > 0 && session.status === 'closed') {
                 if (!moveStoriesBtn) {
                     moveStoriesBtn = document.createElement('button');
                     moveStoriesBtn.id = 'moveStoriesBtn';
@@ -3222,11 +3281,20 @@
                 const questionsIndicator = (story.questions && story.questions.length > 0) ?
                     `<span style="display: inline-block; background: #cbd5e0; color: #2d3748; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">💬 Questions</span>` :
                     '';
+
+                // Show different indicator for estimated vs moved stories
+                let estimateDisplay = '';
+                if (story.estimate || story.estimate === 0) {
+                    estimateDisplay = `<span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>`;
+                } else {
+                    estimateDisplay = `<span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: #4a5568;">↳ Moved</span>`;
+                }
+
                 return `
                     <div class="story-item" onclick="selectPastStory('${story.id}')">
                         <div class="story-title">${escapeHtml(story.title)}</div>
                         <div style="display: flex; gap: 6px; margin-top: 6px;">
-                            <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>
+                            ${estimateDisplay}
                             ${labelDisplay}
                             ${questionsIndicator}
                         </div>
@@ -3247,12 +3315,25 @@
             // Show story details and questions
             const questions = story.questions || [];
             const manualIndicator = story.estimateManuallyChanged ? ` <span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>` : '';
+
             let detailsHtml = `
                 <h3 style="color: #2d3748; margin-bottom: 10px;">${story.title}</h3>
-                <div style="background: #c6f6d5; color: #22543d; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;">
-                    Final Estimate: ${story.estimate}${manualIndicator}
-                </div>
             `;
+
+            // Only show estimate if it exists, otherwise show moved indicator
+            if (story.estimate || story.estimate === 0) {
+                detailsHtml += `
+                    <div style="background: #c6f6d5; color: #22543d; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;">
+                        Final Estimate: ${story.estimate}${manualIndicator}
+                    </div>
+                `;
+            } else {
+                detailsHtml += `
+                    <div style="background: #e2e8f0; color: #4a5568; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;">
+                        ↳ Story moved to another session
+                    </div>
+                `;
+            }
 
             if (questions.length === 0) {
                 detailsHtml += '<p style="color: #718096; text-align: center; padding: 20px;">No questions asked about this story</p>';
