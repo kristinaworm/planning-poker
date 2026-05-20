@@ -690,6 +690,12 @@
                     <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">View</button>
                 </div>
 
+                <div class="card" onclick="showCrossSessionSummary()">
+                    <h4>📊 Summary of Estimates</h4>
+                    <p>View aggregated estimates by label across all closed sessions.</p>
+                    <button class="btn btn-primary" style="margin-top: 15px; width: 100%;">View Summary</button>
+                </div>
+
                 <div class="card" onclick="openAdminFeedback()">
                     <h4 id="feedbackTitle">📊 View Feedback<span id="feedbackBadge" class="unread-badge" style="display: none;"></span></h4>
                     <p>View all user feedback and bug reports (Admin only)</p>
@@ -755,7 +761,7 @@
             <div class="session-grid">
                 <div class="sidebar">
                     <div class="sidebar-card">
-                        <h3>Participants</h3>
+                        <h3 id="participantsHeader">Participants</h3>
                         <div class="participant-list" id="participantsList"></div>
                     </div>
                     <button class="btn btn-success" id="addStoryBtn" style="width: 100%;" onclick="showAddStoryForm()">+ Add Story</button>
@@ -973,6 +979,21 @@
         </div>
     </div>
 
+    <!-- Move Stories Modal -->
+    <div class="modal" id="moveStoriesModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <button class="modal-close" onclick="closeModal('moveStoriesModal')">✕</button>
+            <h2 style="color: #2d3748;">↳ Move Stories to New Session</h2>
+            <p style="color: #718096; margin: 15px 0;">Select un-estimated stories to move to a new session:</p>
+            <div id="storySelectionList" style="max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 4px; margin-bottom: 15px;"></div>
+            <input type="text" id="newSessionNameInput" placeholder="New session name (e.g., Sprint 1 - Continued)" style="width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 4px; margin-bottom: 15px; font-size: 14px;">
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="closeModal('moveStoriesModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="moveStoriesAction()">Create Session</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Password protection
         const APP_PASSWORD = '26SNPOKER*';
@@ -1095,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.29'; // Updated 2026-05-20: Fixed uniform estimate box sizing in session summary
+        const APP_VERSION = '1.0.33'; // Updated 2026-05-20: Added move un-estimated stories to new session
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1267,6 +1288,11 @@
                                     // Update timer display if timer is running
                                     if (currentStory.timerStartedAt && !currentStory.finished) {
                                         updateTimerDisplay(currentStory);
+                                    }
+
+                                    // Check if all participants have voted and auto-finish
+                                    if (currentStory.votingStarted && !currentStory.finished) {
+                                        checkAndAutoFinishVoting();
                                     }
 
                                     // Update tracked state
@@ -1555,6 +1581,10 @@
 
         function renderParticipants(participants) {
             const list = document.getElementById('participantsList');
+            const header = document.getElementById('participantsHeader');
+            if (header) {
+                header.textContent = `Participants (${participants.length})`;
+            }
 
             const roleConfig = {
                 facilitator: { icon: '🎯', label: 'Facilitator' },
@@ -1750,13 +1780,13 @@
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session.stories.find(s => s.id === storyId);
 
-            // Check if participant is trying to browse away before voting (only enforce when session is active)
+            // Check if participant is trying to navigate away while timer is running (only enforce when session is active)
             if (session.status === 'active' && currentRole === 'participant' && session.currentStoryId && session.currentStoryId !== storyId) {
                 const currentStory = session.stories.find(s => s.id === session.currentStoryId);
-                const hasVoted = currentStory?.votes && currentStory.votes[currentUserId];
+                const timerRunning = currentStory && currentStory.timerStartedAt && !currentStory.finished;
 
-                if (currentStory && !currentStory.finished && !hasVoted) {
-                    showToast('🎯 Eyes on the prize! Cast your vote first, then you can explore other stories.', 'error');
+                if (timerRunning) {
+                    showToast('⏱️ Timer is running! Keep focus on this story. You can browse others once voting is complete.', 'error');
                     return;
                 }
             }
@@ -2104,6 +2134,29 @@
 
             // Resume auto-refresh
             startAutoRefresh();
+        }
+
+        function checkAndAutoFinishVoting() {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session || !currentSelectedStoryId) return;
+
+            const story = session.stories.find(s => s.id === currentSelectedStoryId);
+            if (!story || story.finished || !story.votingStarted) return;
+
+            // Count participants (role === 'participant')
+            const participantCount = session.participants.filter(p => p.role === 'participant').length;
+            if (participantCount === 0) return;
+
+            // Count votes from participants
+            const participantVotes = session.participants
+                .filter(p => p.role === 'participant')
+                .filter(p => story.votes && story.votes[p.id] !== undefined)
+                .length;
+
+            // If all participants have voted, auto-finish
+            if (participantVotes === participantCount && currentRole === 'facilitator') {
+                finishVoting();
+            }
         }
 
         async function updateEstimate(storyId, newEstimate) {
@@ -2686,6 +2739,114 @@
             document.getElementById('sessionSummaryModal').classList.add('active');
         }
 
+        function showCrossSessionSummary() {
+            const closedSessions = allSessions.filter(s => s.status === 'closed');
+
+            if (closedSessions.length === 0) {
+                document.getElementById('summaryContent').innerHTML = '<p style="text-align: center; color: #718096;">No closed sessions yet</p>';
+                document.getElementById('sessionSummaryModal').classList.add('active');
+                return;
+            }
+
+            // Flatten stories from all closed sessions
+            const allStories = closedSessions.flatMap(session =>
+                (session.stories || []).map(story => ({
+                    ...story,
+                    sessionName: session.name
+                }))
+            );
+
+            // Filter for stories with estimates
+            const estimatedStories = allStories.filter(s => s.estimate !== null && s.estimate !== undefined && s.estimate !== '');
+
+            if (estimatedStories.length === 0) {
+                document.getElementById('summaryContent').innerHTML = '<p style="text-align: center; color: #718096;">No estimated stories in closed sessions</p>';
+                document.getElementById('sessionSummaryModal').classList.add('active');
+                return;
+            }
+
+            // Group stories by label
+            const labelGroups = {};
+            const unlabeled = [];
+
+            estimatedStories.forEach(story => {
+                if (story.label) {
+                    if (!labelGroups[story.label]) {
+                        labelGroups[story.label] = [];
+                    }
+                    labelGroups[story.label].push(story);
+                } else {
+                    unlabeled.push(story);
+                }
+            });
+
+            let summaryHtml = `<p style="text-align: center; color: #718096; font-size: 12px; margin-bottom: 15px;">Aggregated from ${closedSessions.length} closed session(s) | ${estimatedStories.length} estimated stories</p>`;
+
+            // Display labeled groups first
+            Object.keys(labelGroups).sort().forEach(label => {
+                const stories = labelGroups[label];
+                const estimates = stories.map(s => Number(s.estimate)).filter(e => !isNaN(e));
+                const total = estimates.reduce((a, b) => a + b, 0);
+                const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+
+                summaryHtml += `
+                    <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #9f7aea;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="font-size: 16px;">📌 ${escapeHtml(label)}</strong>
+                            <div style="display: flex; gap: 15px;">
+                                <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
+                                <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
+                            </div>
+                        </div>
+                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                            ${stories.map(s => `
+                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px;">
+                                    <span style="flex: 1;">
+                                        ${escapeHtml(s.title)}
+                                        <span style="color: #718096; font-size: 11px; display: block; margin-top: 2px;">${escapeHtml(s.sessionName)}</span>
+                                    </span>
+                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center; flex-shrink: 0;">${escapeHtml(s.estimate)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Display unlabeled stories if any
+            if (unlabeled.length > 0) {
+                const estimates = unlabeled.map(s => Number(s.estimate)).filter(e => !isNaN(e));
+                const total = estimates.reduce((a, b) => a + b, 0);
+                const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+
+                summaryHtml += `
+                    <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #cbd5e0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="font-size: 16px;">No Label</strong>
+                            <div style="display: flex; gap: 15px;">
+                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
+                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
+                            </div>
+                        </div>
+                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                            ${unlabeled.map(s => `
+                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px;">
+                                    <span style="flex: 1;">
+                                        ${escapeHtml(s.title)}
+                                        <span style="color: #718096; font-size: 11px; display: block; margin-top: 2px;">${escapeHtml(s.sessionName)}</span>
+                                    </span>
+                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px; min-width: 32px; text-align: center; flex-shrink: 0;">${escapeHtml(s.estimate)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('summaryContent').innerHTML = summaryHtml;
+            document.getElementById('sessionSummaryModal').classList.add('active');
+        }
+
         // Load sessions
         async function loadSessions() {
             await loadData();
@@ -2827,8 +2988,144 @@
             }
             summaryBtn.style.display = 'block';
 
+            // Create and inject a move stories button if there are un-estimated stories
+            const unestimatedStories = session.stories.filter(s => !s.estimate || s.estimate === null || s.estimate === undefined);
+            let moveStoriesBtn = document.getElementById('moveStoriesBtn');
+            if (unestimatedStories.length > 0) {
+                if (!moveStoriesBtn) {
+                    moveStoriesBtn = document.createElement('button');
+                    moveStoriesBtn.id = 'moveStoriesBtn';
+                    moveStoriesBtn.className = 'btn btn-primary';
+                    moveStoriesBtn.style.cssText = 'display: block; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px; background: #4299e1;';
+                    moveStoriesBtn.onclick = () => showMoveStoriesModal(session.id);
+                    const headerButtonsContainer = shareSessionBtn.parentNode;
+                    if (headerButtonsContainer) {
+                        headerButtonsContainer.insertBefore(moveStoriesBtn, deleteSessionBtn);
+                    }
+                }
+                moveStoriesBtn.textContent = `↳ Move Stories (${unestimatedStories.length})`;
+                moveStoriesBtn.style.display = 'block';
+            } else if (moveStoriesBtn) {
+                moveStoriesBtn.style.display = 'none';
+            }
+
             renderParticipants(session.participants);
             renderPastStories(session.stories || []);
+        }
+
+        function showMoveStoriesModal(sessionId) {
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            // Filter un-estimated stories
+            const unestimatedStories = session.stories.filter(s =>
+                !s.estimate || s.estimate === null || s.estimate === undefined
+            );
+
+            if (unestimatedStories.length === 0) {
+                showToast('No un-estimated stories in this session', 'error');
+                return;
+            }
+
+            // Store session ID for later
+            window.moveFromSessionId = sessionId;
+
+            // Render checkboxes for each story
+            const list = document.getElementById('storySelectionList');
+            list.innerHTML = unestimatedStories.map(story => `
+                <div style="padding: 8px; border-bottom: 1px solid #e2e8f0;">
+                    <label style="display: flex; align-items: center; cursor: pointer; padding: 5px 0;">
+                        <input type="checkbox" value="${story.id}" checked style="margin-right: 10px; cursor: pointer;">
+                        <span style="flex: 1;">${escapeHtml(story.title)}</span>
+                        ${story.label ? `<span style="background: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left: 8px;">${escapeHtml(story.label)}</span>` : ''}
+                    </label>
+                </div>
+            `).join('');
+
+            // Set default session name
+            document.getElementById('newSessionNameInput').value = `${session.name} - Continued`;
+
+            document.getElementById('moveStoriesModal').classList.add('active');
+        }
+
+        async function moveStoriesAction() {
+            const sessionId = window.moveFromSessionId;
+            const session = allSessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            // Get selected story IDs
+            const checkboxes = document.querySelectorAll('#storySelectionList input[type="checkbox"]:checked');
+            const selectedStoryIds = Array.from(checkboxes).map(cb => cb.value);
+
+            if (selectedStoryIds.length === 0) {
+                showToast('Please select at least one story', 'error');
+                return;
+            }
+
+            const newSessionName = document.getElementById('newSessionNameInput').value.trim();
+            if (!newSessionName) {
+                showToast('Please enter a session name', 'error');
+                return;
+            }
+
+            // Copy selected stories (create new objects to avoid reference issues)
+            const copiesToMove = session.stories
+                .filter(s => selectedStoryIds.includes(s.id))
+                .map(story => ({
+                    id: generateId(),
+                    title: story.title,
+                    votes: {},
+                    estimate: null,
+                    questions: [],
+                    votingStarted: false,
+                    finished: false,
+                    jiraLink: story.jiraLink || null,
+                    jiraKey: story.jiraKey || null,
+                    label: story.label || null,
+                    timerStartedAt: null
+                }));
+
+            // Create new session
+            const newSessionId = generateId();
+            const code = generateCode();
+            const newSession = {
+                id: newSessionId,
+                code: code,
+                name: newSessionName,
+                createdAt: new Date().toISOString(),
+                status: 'pending',
+                participants: [],
+                stories: copiesToMove,
+                currentStoryId: null
+            };
+
+            allSessions.push(newSession);
+            await saveData();
+
+            closeModal('moveStoriesModal');
+            showToast(`Created session "${newSessionName}" with ${copiesToMove.length} stories`);
+
+            // Ask if user wants to join the new session
+            if (confirm(`Would you like to join the new session "${newSessionName}"?`)) {
+                // Auto-join as facilitator
+                currentSessionId = newSessionId;
+                currentUserId = generateId();
+                currentRole = 'facilitator';
+
+                const userName = prompt('Your name:', 'Facilitator');
+                if (!userName) return;
+
+                newSession.participants.push({
+                    id: currentUserId,
+                    name: userName,
+                    role: 'facilitator'
+                });
+
+                localStorage.setItem(`user_${newSession.code}`, currentUserId);
+                await saveData();
+
+                renderSession(newSessionId);
+            }
         }
 
         function renderPastStories(stories) {
