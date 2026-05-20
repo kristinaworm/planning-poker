@@ -3153,13 +3153,16 @@
                 code = oldCode;
             }
 
+            // If keeping old code, copy all participants; if new code, start fresh
+            const newParticipants = useOldCode ? session.participants : [];
+
             const newSession = {
                 id: newSessionId,
                 code: code,
                 name: newSessionName,
                 createdAt: new Date().toISOString(),
                 status: 'pending',
-                participants: session.participants,
+                participants: newParticipants,
                 stories: copiesToMove,
                 currentStoryId: null
             };
@@ -3174,17 +3177,24 @@
             if (confirm(`Would you like to join the new session "${newSessionName}"?`)) {
                 // Auto-join as facilitator
                 currentSessionId = newSessionId;
-                currentUserId = generateId();
                 currentRole = 'facilitator';
 
-                const userName = prompt('Your name:', 'Facilitator');
-                if (!userName) return;
+                // If we copied participants and user is already in the session, don't add them again
+                const currentUserInNewSession = newSession.participants.find(p => p.role === 'facilitator');
+                if (currentUserInNewSession) {
+                    currentUserId = currentUserInNewSession.id;
+                } else {
+                    // Only add new participant if they're not already there
+                    currentUserId = generateId();
+                    const userName = prompt('Your name:', 'Facilitator');
+                    if (!userName) return;
 
-                newSession.participants.push({
-                    id: currentUserId,
-                    name: userName,
-                    role: 'facilitator'
-                });
+                    newSession.participants.push({
+                        id: currentUserId,
+                        name: userName,
+                        role: 'facilitator'
+                    });
+                }
 
                 localStorage.setItem(`user_${newSession.code}`, currentUserId);
                 await saveData();
