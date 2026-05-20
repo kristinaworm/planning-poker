@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.38'; // Updated 2026-05-20: Auto-carry participants to new sessions when moving stories
+        const APP_VERSION = '1.0.39'; // Updated 2026-05-20: Fixed missing manual edit indicator in past sessions view
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -3220,10 +3220,11 @@
 
             // Show story details and questions
             const questions = story.questions || [];
+            const manualIndicator = story.estimateManuallyChanged ? ` <span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>` : '';
             let detailsHtml = `
                 <h3 style="color: #2d3748; margin-bottom: 10px;">${story.title}</h3>
-                <div style="background: #c6f6d5; color: #22543d; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600;">
-                    Final Estimate: ${story.estimate}
+                <div style="background: #c6f6d5; color: #22543d; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;">
+                    Final Estimate: ${story.estimate}${manualIndicator}
                 </div>
             `;
 
