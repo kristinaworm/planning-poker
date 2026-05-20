@@ -888,6 +888,10 @@
                     <label>Jira Link (optional)</label>
                     <input type="url" id="storyJiraLinkInput" placeholder="https://yourjira.atlassian.net/browse/SP-123">
                 </div>
+                <div class="form-group">
+                    <label>Label/Tag (optional)</label>
+                    <input type="text" id="storyLabelInput" placeholder="e.g., 5.4.10, backend, frontend">
+                </div>
                 <div class="form-actions">
                     <button class="btn btn-primary" onclick="addStory()">Add</button>
                     <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748;" onclick="closeModal('addStoryModal')">Cancel</button>
@@ -909,6 +913,10 @@
                 <div class="form-group">
                     <label>Jira Link (optional)</label>
                     <input type="url" id="editStoryJiraLinkInput" placeholder="https://yourjira.atlassian.net/browse/SP-123">
+                </div>
+                <div class="form-group">
+                    <label>Label/Tag (optional)</label>
+                    <input type="text" id="editStoryLabelInput" placeholder="e.g., 5.4.10, backend, frontend">
                 </div>
                 <div class="form-actions">
                     <button class="btn btn-primary" onclick="saveStoryEdit()">Save</button>
@@ -949,6 +957,18 @@
             <div id="feedbackListContent" style="margin-top: 20px;"></div>
             <div class="form-actions" style="margin-top: 20px;">
                 <button class="btn btn-primary" onclick="closeModal('adminFeedbackModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Summary Modal -->
+    <div class="modal" id="sessionSummaryModal">
+        <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <button class="modal-close" onclick="closeModal('sessionSummaryModal')">✕</button>
+            <h3 style="color: #2d3748;">📊 Session Summary by Label</h3>
+            <div id="summaryContent" style="margin-top: 20px;"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" onclick="closeModal('sessionSummaryModal')">Close</button>
             </div>
         </div>
     </div>
@@ -1075,7 +1095,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.22'; // Updated 2026-05-20: Feedback delete feature
+        const APP_VERSION = '1.0.26'; // Updated 2026-05-20: QA fixes for labels/summary feature
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1328,6 +1348,7 @@
         function showAddStoryForm() {
             document.getElementById('storyTitleInput').value = '';
             document.getElementById('storyJiraLinkInput').value = '';
+            document.getElementById('storyLabelInput').value = '';
             document.getElementById('addStoryModal').classList.add('active');
         }
 
@@ -1586,6 +1607,11 @@
                     `<a href="${story.jiraLink}" target="_blank" onclick="event.stopPropagation();" style="color: #0066b2; font-size: 12px; font-weight: 600; margin-right: 8px; text-decoration: none;">🔗 ${jiraKey}</a>` :
                     '';
 
+                // Display label if available
+                const labelDisplay = story.label ?
+                    `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-right: 6px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
+                    '';
+
                 const resetBtn = story.estimate ? `<button class="btn btn-primary" style="padding: 6px 10px; font-size: 12px; flex: 1; background: #ed8936;" onclick="resetStory('${story.id}'); event.stopPropagation();">↻ Reset</button>` : '';
                 const actionButtons = currentRole === 'facilitator' ? `
                     <div style="display: flex; gap: 5px; margin-top: 8px;">
@@ -1604,7 +1630,7 @@
                 return `
                     <div class="story-item ${draggableClass} ${currentVotingClass}" data-story-id="${story.id}" data-story-index="${index}" ${draggableAttr}
                          onclick="selectStory('${story.id}')">
-                        <div class="story-title">${jiraDisplay}${story.title}${unreadBadge}</div>
+                        <div class="story-title">${jiraDisplay}${labelDisplay}${story.title}${unreadBadge}</div>
                         <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; ${badgeClass}">${badgeText}</span>
                         ${actionButtons}
                     </div>
@@ -2039,7 +2065,10 @@
             let estimate;
             if (numericValues.length > 0) {
                 const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
-                estimate = Math.round(avg);
+                const numericDeckValues = CARD_VALUES.filter(v => !isNaN(v));
+                estimate = numericDeckValues.reduce((closest, current) =>
+                    Math.abs(current - avg) < Math.abs(closest - avg) ? current : closest
+                );
             } else {
                 estimate = votes[0];
             }
@@ -2061,6 +2090,7 @@
                 <div class="estimate-result">
                     <h4>✓ Voting Complete</h4>
                     <div class="estimate-value">${estimate}</div>
+                    ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${currentSelectedStoryId}', '${estimate}')">✏️ Edit</button>` : ''}
                 </div>
             `;
 
@@ -2071,6 +2101,76 @@
 
             // Resume auto-refresh
             startAutoRefresh();
+        }
+
+        async function updateEstimate(storyId, newEstimate) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session || currentRole !== 'facilitator') return;
+
+            const story = session.stories.find(s => s.id === storyId);
+            if (!story) return;
+
+            stopAutoRefresh();
+            story.estimate = newEstimate;
+            await saveData();
+
+            document.getElementById('estimateResult').innerHTML = `
+                <div class="estimate-result">
+                    <h4>✓ Voting Complete</h4>
+                    <div class="estimate-value">${newEstimate}</div>
+                    ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${newEstimate}')">✏️ Edit</button>` : ''}
+                </div>
+            `;
+
+            renderStories(session.stories);
+            showToast(`Estimate updated to ${newEstimate}`);
+            startAutoRefresh();
+        }
+
+        function showEstimateEditor(storyId, currentEstimate) {
+            const options = CARD_VALUES.map(v => `<option value="${v}" ${v === currentEstimate ? 'selected' : ''}>${v}</option>`).join('');
+            const editor = `
+                <div style="background: white; padding: 15px; border-radius: 6px; margin-top: 12px; border: 2px solid #0066b2;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Select New Estimate:</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="estimateSelect" style="flex: 1; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 14px;">
+                            ${options}
+                        </select>
+                        <button class="btn btn-success" style="padding: 8px 12px;" onclick="confirmEstimateChange('${storyId}')">Save</button>
+                        <button class="btn btn-primary" style="background: #cbd5e0; color: #2d3748; padding: 8px 12px;" onclick="cancelEstimateEditor('${storyId}')">Cancel</button>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('estimateResult').innerHTML = `
+                <div class="estimate-result">
+                    <h4>✓ Voting Complete</h4>
+                    <div class="estimate-value">${currentEstimate}</div>
+                    ${editor}
+                </div>
+            `;
+        }
+
+        function confirmEstimateChange(storyId) {
+            const select = document.getElementById('estimateSelect');
+            if (select) {
+                const newEstimate = select.value;
+                updateEstimate(storyId, newEstimate);
+            }
+        }
+
+        function cancelEstimateEditor(storyId) {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session?.stories.find(s => s.id === storyId);
+            if (story) {
+                document.getElementById('estimateResult').innerHTML = `
+                    <div class="estimate-result">
+                        <h4>✓ Voting Complete</h4>
+                        <div class="estimate-value">${story.estimate}</div>
+                        ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${story.estimate}')">✏️ Edit</button>` : ''}
+                    </div>
+                `;
+            }
         }
 
         let currentSelectedStoryId = null;
@@ -2269,6 +2369,7 @@
 
             const title = document.getElementById('storyTitleInput').value.trim();
             const jiraLink = document.getElementById('storyJiraLinkInput').value.trim();
+            const label = document.getElementById('storyLabelInput').value.trim();
 
             if (!title) {
                 showToast('Story title is required', 'error');
@@ -2300,6 +2401,11 @@
                 story.jiraLink = jiraLink;
             }
 
+            // Add label if provided
+            if (label) {
+                story.label = label;
+            }
+
             // Pause auto-refresh to avoid race condition
             stopAutoRefresh();
 
@@ -2328,6 +2434,7 @@
             editingStoryId = storyId;
             document.getElementById('editStoryTitleInput').value = story.title;
             document.getElementById('editStoryJiraLinkInput').value = story.jiraLink || '';
+            document.getElementById('editStoryLabelInput').value = story.label || '';
             document.getElementById('editStoryModal').classList.add('active');
         }
 
@@ -2339,6 +2446,7 @@
 
             const title = document.getElementById('editStoryTitleInput').value.trim();
             const jiraLink = document.getElementById('editStoryJiraLinkInput').value.trim();
+            const label = document.getElementById('editStoryLabelInput').value.trim();
 
             if (!title) {
                 showToast('Story title is required', 'error');
@@ -2353,6 +2461,12 @@
                 story.jiraLink = jiraLink;
             } else {
                 delete story.jiraLink;
+            }
+
+            if (label) {
+                story.label = label;
+            } else {
+                delete story.label;
             }
 
             await saveData();
@@ -2478,6 +2592,97 @@
             }
         }
 
+        function showSessionSummary() {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            if (!session || !session.stories) {
+                showToast('No stories in this session', 'error');
+                return;
+            }
+
+            const estimatedStories = session.stories.filter(s => s.estimate !== null && s.estimate !== undefined);
+
+            if (estimatedStories.length === 0) {
+                document.getElementById('summaryContent').innerHTML = '<p style="text-align: center; color: #718096;">No estimated stories yet</p>';
+                document.getElementById('sessionSummaryModal').classList.add('active');
+                return;
+            }
+
+            // Group stories by label
+            const labelGroups = {};
+            const unlabeled = [];
+
+            estimatedStories.forEach(story => {
+                if (story.label) {
+                    if (!labelGroups[story.label]) {
+                        labelGroups[story.label] = [];
+                    }
+                    labelGroups[story.label].push(story);
+                } else {
+                    unlabeled.push(story);
+                }
+            });
+
+            let summaryHtml = '';
+
+            // Display labeled groups first
+            Object.keys(labelGroups).sort().forEach(label => {
+                const stories = labelGroups[label];
+                const estimates = stories.map(s => Number(s.estimate)).filter(e => !isNaN(e));
+                const total = estimates.reduce((a, b) => a + b, 0);
+                const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+
+                summaryHtml += `
+                    <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #9f7aea;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="font-size: 16px;">📌 ${escapeHtml(label)}</strong>
+                            <div style="display: flex; gap: 15px;">
+                                <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
+                                <span style="background: #e9d8fd; color: #553399; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
+                            </div>
+                        </div>
+                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                            ${stories.map(s => `
+                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 13px;">
+                                    <span>${escapeHtml(s.title)}</span>
+                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px;">${escapeHtml(s.estimate)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Display unlabeled stories if any
+            if (unlabeled.length > 0) {
+                const estimates = unlabeled.map(s => Number(s.estimate)).filter(e => !isNaN(e));
+                const total = estimates.reduce((a, b) => a + b, 0);
+                const avg = estimates.length > 0 ? (total / estimates.length).toFixed(1) : 0;
+
+                summaryHtml += `
+                    <div style="background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #cbd5e0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong style="font-size: 16px;">No Label</strong>
+                            <div style="display: flex; gap: 15px;">
+                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Total: ${total}</span>
+                                <span style="background: #e2e8f0; color: #2d3748; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600;">Avg: ${avg}</span>
+                            </div>
+                        </div>
+                        <div style="background: #f7fafc; padding: 10px; border-radius: 4px; max-height: 150px; overflow-y: auto;">
+                            ${unlabeled.map(s => `
+                                <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 13px;">
+                                    <span>${escapeHtml(s.title)}</span>
+                                    <span style="background: #0066b2; color: white; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11px;">${escapeHtml(s.estimate)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            document.getElementById('summaryContent').innerHTML = summaryHtml;
+            document.getElementById('sessionSummaryModal').classList.add('active');
+        }
+
         // Load sessions
         async function loadSessions() {
             await loadData();
@@ -2581,7 +2786,7 @@
             // Update empty state message for past sessions
             document.getElementById('emptyStateText').textContent = 'Select a story to view details';
 
-            // Show only back home, share link, and delete for facilitators
+            // Show only back home, share link, summary, and delete for facilitators
             const shareSessionBtn = document.getElementById('shareSessionBtn');
             const deleteSessionBtn = document.getElementById('deleteSessionBtn');
             const startSessionBtn = document.getElementById('startSessionBtn');
@@ -2599,9 +2804,25 @@
             questionFormArea.style.display = 'none';
             feedbackBtn.style.display = 'none';
 
-            // Show share and delete for facilitators
+            // Show share, summary, and delete for facilitators
             shareSessionBtn.style.display = currentRole === 'facilitator' ? 'block' : 'none';
             deleteSessionBtn.style.display = currentRole === 'facilitator' ? 'block' : 'none';
+
+            // Create and inject a summary button for closed sessions
+            let summaryBtn = document.getElementById('summaryBtn');
+            if (!summaryBtn) {
+                summaryBtn = document.createElement('button');
+                summaryBtn.id = 'summaryBtn';
+                summaryBtn.className = 'btn btn-primary';
+                summaryBtn.style.cssText = 'display: block; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px; background: #9f7aea;';
+                summaryBtn.textContent = '📊 Summary';
+                summaryBtn.onclick = () => showSessionSummary();
+                const headerButtonsContainer = shareSessionBtn.parentNode;
+                if (headerButtonsContainer) {
+                    headerButtonsContainer.insertBefore(summaryBtn, deleteSessionBtn);
+                }
+            }
+            summaryBtn.style.display = 'block';
 
             renderParticipants(session.participants);
             renderPastStories(session.stories || []);
@@ -2620,10 +2841,13 @@
             }
 
             list.innerHTML = stories.map(story => {
+                const labelDisplay = story.label ?
+                    `<span style="display: inline-block; background: #bee3f8; color: #2c5282; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-right: 6px; font-weight: 600;">📌 ${escapeHtml(story.label)}</span>` :
+                    '';
                 return `
                     <div class="story-item" onclick="selectPastStory('${story.id}')">
-                        <div class="story-title">${story.title}</div>
-                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${story.estimate}</span>
+                        <div class="story-title">${labelDisplay}${escapeHtml(story.title)}</div>
+                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>
                     </div>
                 `;
             }).join('');
