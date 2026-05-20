@@ -1116,7 +1116,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.41'; // Updated 2026-05-20: Added questions indicator and reordered story tags
+        const APP_VERSION = '1.0.42'; // Updated 2026-05-20: Improved centering of estimate and manual indicator in voting complete box
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1918,11 +1918,11 @@
                     // Show estimate result for finished stories
                     const estimate = story.estimate;
                     if (estimate !== null && estimate !== undefined) {
-                        const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>` : '';
+                        const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600; display: flex; align-items: center;">✏️ Manual</span>` : '';
                         document.getElementById('estimateResult').innerHTML = `
                             <div class="estimate-result">
                                 <h4>✓ Final Estimate</h4>
-                                <div style="display: flex; align-items: center;">
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
                                     <div class="estimate-value">${estimate}</div>
                                     ${manualIndicator}
                                 </div>
@@ -2134,7 +2134,7 @@
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
                     <h4>✓ Voting Complete</h4>
-                    <div style="display: flex; align-items: center;">
+                    <div style="display: flex; align-items: center; justify-content: center;">
                         <div class="estimate-value">${estimate}</div>
                     </div>
                     ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${currentSelectedStoryId}', '${estimate}')">✏️ Edit</button>` : ''}
@@ -2188,9 +2188,9 @@
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
                     <h4>✓ Voting Complete</h4>
-                    <div style="display: flex; align-items: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
                         <div class="estimate-value">${newEstimate}</div>
-                        <span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>
+                        <span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; display: flex; align-items: center;">✏️ Manual</span>
                     </div>
                     ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${newEstimate}')">✏️ Edit</button>` : ''}
                 </div>
@@ -2237,11 +2237,11 @@
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session?.stories.find(s => s.id === storyId);
             if (story) {
-                const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;">✏️ Manual</span>` : '';
+                const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; display: flex; align-items: center;">✏️ Manual</span>` : '';
                 document.getElementById('estimateResult').innerHTML = `
                     <div class="estimate-result">
                         <h4>✓ Voting Complete</h4>
-                        <div style="display: flex; align-items: center;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
                             <div class="estimate-value">${story.estimate}</div>
                             ${manualIndicator}
                         </div>
