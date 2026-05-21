@@ -1121,7 +1121,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.51'; // Updated 2026-05-21: Fixed moved story false positive, made delete button subtle
+        const APP_VERSION = '1.0.52'; // Updated 2026-05-21: Added manual estimate change tracking, fixed moved story false positive
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -2019,13 +2019,15 @@
                     // Show estimate result for finished stories
                     const estimate = story.estimate;
                     if (estimate !== null && estimate !== undefined) {
-                        const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600; display: inline-flex; align-items: center;">✏️ Manual</span>` : '';
+                        const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600; display: inline-flex; align-items: center;" title="Calculated: ${story.calculatedEstimate || 'unknown'}">✏️ Manual</span>` : '';
+                        const changeNote = story.estimateManuallyChanged && story.calculatedEstimate ? `<span style="font-size: 12px; color: #718096; margin-top: 8px; display: block;"><s>${story.calculatedEstimate}</s> → ${estimate}</span>` : '';
                         document.getElementById('estimateResult').innerHTML = `
                             <div class="estimate-result">
                                 <h4 style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 12px 0;">✓ Final Estimate${manualIndicator}</h4>
                                 <div style="display: flex; align-items: center; justify-content: center;">
                                     <div class="estimate-value">${estimate}</div>
                                 </div>
+                                ${changeNote}
                                 ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${storyId}', '${estimate}')">✏️ Edit</button>` : ''}
                             </div>
                         `;
@@ -2280,23 +2282,42 @@
             const story = session.stories.find(s => s.id === storyId);
             if (!story) return;
 
+            // Calculate what the auto-calculated estimate would be from current votes
+            const votes = Object.values(story.votes || {});
+            let calculatedEstimate = story.estimate;
+            if (votes.length > 0) {
+                const numericValues = votes.filter(v => !isNaN(v) && v !== '?').map(Number);
+                if (numericValues.length > 0) {
+                    const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+                    const numericDeckValues = CARD_VALUES.filter(v => !isNaN(v));
+                    calculatedEstimate = numericDeckValues.reduce((closest, current) =>
+                        Math.abs(current - avg) < Math.abs(closest - avg) ? current : closest
+                    );
+                } else {
+                    calculatedEstimate = votes[0];
+                }
+            }
+
             stopAutoRefresh();
             story.estimate = newEstimate;
             story.estimateManuallyChanged = true;
+            story.calculatedEstimate = calculatedEstimate;
             await saveData();
 
+            const changeNote = calculatedEstimate !== newEstimate ? `<span style="font-size: 12px; color: #718096; margin-top: 8px; display: block;"><s>${calculatedEstimate}</s> → ${newEstimate}</span>` : '';
             document.getElementById('estimateResult').innerHTML = `
                 <div class="estimate-result">
-                    <h4 style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 12px 0;">✓ Voting Complete<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center;">✏️ Manual</span></h4>
+                    <h4 style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 12px 0;">✓ Voting Complete<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center;" title="Calculated: ${calculatedEstimate}">✏️ Manual</span></h4>
                     <div style="display: flex; align-items: center; justify-content: center;">
                         <div class="estimate-value">${newEstimate}</div>
                     </div>
+                    ${changeNote}
                     ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${newEstimate}')">✏️ Edit</button>` : ''}
                 </div>
             `;
 
             renderStories(session.stories);
-            showToast(`Estimate updated to ${newEstimate}`);
+            showToast(`Estimate updated: ${calculatedEstimate} → ${newEstimate}`);
             startAutoRefresh();
         }
 
@@ -2336,13 +2357,15 @@
             const session = allSessions.find(s => s.id === currentSessionId);
             const story = session?.stories.find(s => s.id === storyId);
             if (story) {
-                const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center;">✏️ Manual</span>` : '';
+                const manualIndicator = story.estimateManuallyChanged ? `<span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center;" title="Calculated: ${story.calculatedEstimate || 'unknown'}">✏️ Manual</span>` : '';
+                const changeNote = story.estimateManuallyChanged && story.calculatedEstimate ? `<span style="font-size: 12px; color: #718096; margin-top: 8px; display: block;"><s>${story.calculatedEstimate}</s> → ${story.estimate}</span>` : '';
                 document.getElementById('estimateResult').innerHTML = `
                     <div class="estimate-result">
                         <h4 style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 12px 0;">✓ Voting Complete${manualIndicator}</h4>
                         <div style="display: flex; align-items: center; justify-content: center;">
                             <div class="estimate-value">${story.estimate}</div>
                         </div>
+                        ${changeNote}
                         ${currentRole === 'facilitator' ? `<button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; margin-top: 8px;" onclick="showEstimateEditor('${story.id}', '${story.estimate}')">✏️ Edit</button>` : ''}
                     </div>
                 `;
@@ -3467,7 +3490,8 @@
                 let estimateDisplay = '';
                 if (story.estimate || story.estimate === 0) {
                     estimateDisplay = `<span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #c6f6d5; color: #22543d;">✓ ${escapeHtml(story.estimate)}</span>`;
-                } else {
+                } else if (story.movedToSessionId && story.movedToSessionId !== currentSessionId) {
+                    // Only show moved indicator if story was actually moved to a different session
                     estimateDisplay = `<span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: #4a5568;">↳ Moved</span>`;
                 }
 
