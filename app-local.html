@@ -754,7 +754,7 @@
                     <button class="btn btn-success" id="startSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="startSession()">Start</button>
                     <button class="btn btn-primary" id="pauseResumeBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px; background: #ed8936;" onclick="togglePauseSession()">Pause</button>
                     <button class="btn btn-danger" id="closeSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="closeSession()">Close</button>
-                    <button class="btn btn-danger" id="deleteSessionBtn" style="display: none; padding: 10px 16px; font-size: 14px; flex: 1; min-width: 140px;" onclick="deleteCurrentSession()">🗑️ Delete</button>
+                    <button id="deleteSessionBtn" style="display: none; padding: 8px 10px; font-size: 16px; background: transparent; color: #a0aec0; border: none; border-radius: 4px; cursor: pointer; transition: all 0.2s; min-width: 36px; margin-left: auto;" onmouseover="this.style.color='#718096'; this.style.background='#f7fafc';" onmouseout="this.style.color='#a0aec0'; this.style.background='transparent';" onclick="deleteCurrentSession()" title="Delete session">🗑️</button>
                 </div>
             </div>
 
@@ -1121,7 +1121,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.50'; // Updated 2026-05-21: Redesigned label selector to Excel-style dropdown filter with search
+        const APP_VERSION = '1.0.51'; // Updated 2026-05-21: Fixed moved story false positive, made delete button subtle
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -2816,7 +2816,7 @@
                 summaryHtml += `
                     <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0; position: relative;">
                         <div style="margin-bottom: 15px;">
-                            <button id="labelFilterBtn" onclick="toggleLabelFilterDropdown()" style="width: 100%; padding: 10px 12px; background: #0066b2; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                            <button id="labelFilterBtn" onclick="toggleLabelFilterDropdown()" style="width: 100%; padding: 10px 12px; background: #f0f5fb; color: #0066b2; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s;" onmouseover="this.style.background='#e6f0fa'; this.style.borderColor='#0066b2';" onmouseout="this.style.background='#f0f5fb'; this.style.borderColor='#cbd5e0';">
                                 <span id="labelFilterText">🔽 Filter Labels</span>
                                 <span style="font-size: 12px; opacity: 0.9;" id="selectedLabelCount"></span>
                             </button>
@@ -3008,7 +3008,7 @@
                 summaryHtml += `
                     <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0; position: relative;">
                         <div style="margin-bottom: 15px;">
-                            <button id="labelFilterBtn" onclick="toggleLabelFilterDropdown()" style="width: 100%; padding: 10px 12px; background: #0066b2; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                            <button id="labelFilterBtn" onclick="toggleLabelFilterDropdown()" style="width: 100%; padding: 10px 12px; background: #f0f5fb; color: #0066b2; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s;" onmouseover="this.style.background='#e6f0fa'; this.style.borderColor='#0066b2';" onmouseout="this.style.background='#f0f5fb'; this.style.borderColor='#cbd5e0';">
                                 <span id="labelFilterText">🔽 Filter Labels</span>
                                 <span style="font-size: 12px; opacity: 0.9;" id="selectedLabelCount"></span>
                             </button>
@@ -3354,6 +3354,9 @@
                 return;
             }
 
+            // Create new session ID first so we can track where stories are moved to
+            const newSessionId = generateId();
+
             // Copy selected stories (create new objects to avoid reference issues)
             const copiesToMove = session.stories
                 .filter(s => selectedStoryIds.includes(s.id))
@@ -3369,11 +3372,10 @@
                     jiraKey: story.jiraKey || null,
                     label: story.label || null,
                     timerStartedAt: null,
-                    description: story.description || null
+                    description: story.description || null,
+                    movedToSessionId: newSessionId // Track which session this story was moved to
                 }));
 
-            // Create new session
-            const newSessionId = generateId();
             let code = generateCode();
 
             // Ask if user wants to keep the same session code
@@ -3499,14 +3501,15 @@
                 <h3 style="color: #2d3748; margin-bottom: 10px;">${story.title}</h3>
             `;
 
-            // Only show estimate if it exists, otherwise show moved indicator
+            // Only show estimate if it exists, otherwise show moved indicator (only if moved to different session)
             if (story.estimate || story.estimate === 0) {
                 detailsHtml += `
                     <div style="background: #c6f6d5; color: #22543d; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;">
                         Final Estimate: ${story.estimate}${manualIndicator}
                     </div>
                 `;
-            } else {
+            } else if (story.movedToSessionId && story.movedToSessionId !== currentSessionId) {
+                // Only show "moved" if story was moved to a DIFFERENT session than the one we're viewing
                 detailsHtml += `
                     <div style="background: #e2e8f0; color: #4a5568; padding: 10px 12px; border-radius: 6px; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;">
                         ↳ Story moved to another session
