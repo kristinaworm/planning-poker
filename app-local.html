@@ -779,11 +779,14 @@
 
                         <div id="timerSection" class="timer-section" style="display: none;">
                             <p style="color: #718096; margin-bottom: 10px;">Voting Timer</p>
-                            <div class="timer-display" id="timerDisplay">2:00</div>
+                            <div class="timer-display" id="timerDisplay">5:00</div>
                             <div class="timer-bar">
                                 <div class="timer-progress" id="timerProgress" style="width: 100%;"></div>
                             </div>
-                            <button class="btn btn-primary" style="width: 100%; margin-top: 8px; padding: 10px 16px;" id="startTimerBtn" onclick="startTimer()">Start Timer</button>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+                                <button class="btn btn-primary" id="startTimerBtn" onclick="startTimer()">Start Timer</button>
+                                <button class="btn btn-primary" id="restartTimerBtn" onclick="restartTimer()" style="display: none; background: #ed8936;">↻ Restart</button>
+                            </div>
                         </div>
 
                         <p id="selectEstimateText" style="margin-bottom: 15px; color: #718096; font-size: 14px; display: none;">
@@ -1029,7 +1032,9 @@
 
             // Load sessions to check if it exists
             await loadData();
-            const session = allSessions.find(s => s.code === joinCode);
+            // Prioritize newer sessions if multiple have the same code
+            const matchingSessions = allSessions.filter(s => s.code === joinCode);
+            const session = matchingSessions.length > 0 ? matchingSessions[matchingSessions.length - 1] : null;
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
@@ -1116,7 +1121,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.47'; // Updated 2026-05-20: Fixed duplicate facilitator bug by properly copying participants array
+        const APP_VERSION = '1.0.50'; // Updated 2026-05-21: Redesigned label selector to Excel-style dropdown filter with search
 
         // HTML escape function to prevent XSS
         function escapeHtml(text) {
@@ -1432,7 +1437,9 @@
             }
 
             await loadData();
-            const session = allSessions.find(s => s.code === code && (s.status === 'active' || s.status === 'pending' || s.status === 'paused'));
+            // Find session by code, prioritizing newer sessions (last created) if multiple exist
+            const matchingSessions = allSessions.filter(s => s.code === code && (s.status === 'active' || s.status === 'pending' || s.status === 'paused'));
+            const session = matchingSessions.length > 0 ? matchingSessions[matchingSessions.length - 1] : null;
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
@@ -1698,7 +1705,7 @@
         // Timer functionality
         let timerInterval = null;
         let timerDisplayInterval = null;
-        const TIMER_DURATION = 120;
+        const TIMER_DURATION = 300; // 5 minutes
 
         async function startTimer() {
             if (timerInterval) return; // Already running
@@ -1725,13 +1732,21 @@
             timerInterval = setInterval(() => {
                 updateTimerDisplay(story);
 
-                // Auto-finish when timer ends
+                // Timer expiration logic
                 const timeRemaining = TIMER_DURATION - Math.floor((Date.now() - story.timerStartedAt) / 1000);
                 if (timeRemaining <= 0) {
                     clearInterval(timerInterval);
                     timerInterval = null;
-                    showToast('Time is up! Finishing voting...');
-                    finishVoting();
+                    document.getElementById('startTimerBtn').disabled = true;
+                    document.getElementById('startTimerBtn').textContent = 'Time Up';
+                    // Show restart button for facilitator to allow restarting the timer
+                    if (currentRole === 'facilitator') {
+                        const restartBtn = document.getElementById('restartTimerBtn');
+                        if (restartBtn) {
+                            restartBtn.style.display = 'block';
+                        }
+                        showToast('Time is up! You can restart the timer or finish voting.');
+                    }
                 }
 
                 // Check if all participants have voted
@@ -1786,6 +1801,85 @@
                 document.getElementById('startTimerBtn').textContent = 'Start Timer';
             }
         }
+
+        async function restartTimer() {
+            const session = allSessions.find(s => s.id === currentSessionId);
+            const story = session.stories.find(s => s.id === currentSelectedStoryId);
+            if (!story) return;
+
+            // Stop current timer and hide restart button
+            stopTimer();
+            document.getElementById('restartTimerBtn').style.display = 'none';
+
+            // Reset timer and restart
+            story.timerStartedAt = Date.now();
+            await saveData();
+
+            // Restart timer with fresh timestamp
+            startTimer();
+            showToast('Timer restarted!');
+        }
+
+        // Label filter dropdown functionality
+        let labelFilterDropdownOpen = false;
+
+        function toggleLabelFilterDropdown() {
+            const dropdown = document.getElementById('labelFilterDropdown');
+            if (!dropdown) return;
+            labelFilterDropdownOpen = !labelFilterDropdownOpen;
+            dropdown.style.display = labelFilterDropdownOpen ? 'block' : 'none';
+            if (labelFilterDropdownOpen) {
+                const searchInput = document.getElementById('labelSearchInput');
+                if (searchInput) searchInput.focus();
+            }
+        }
+
+        function filterLabelList(searchTerm) {
+            const options = document.querySelectorAll('.label-filter-option');
+            const term = searchTerm.toLowerCase();
+            options.forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(term) ? 'flex' : 'none';
+            });
+        }
+
+        function selectAllLabels() {
+            document.querySelectorAll('.label-selector').forEach(cb => {
+                if (cb.parentElement.style.display !== 'none') cb.checked = true;
+            });
+            updateSummaryCombinedTotal();
+            updateFilterButtonText();
+        }
+
+        function clearAllLabels() {
+            document.querySelectorAll('.label-selector').forEach(cb => cb.checked = false);
+            updateSummaryCombinedTotal();
+            updateFilterButtonText();
+        }
+
+        function updateFilterButtonText() {
+            const checked = document.querySelectorAll('.label-selector:checked').length;
+            const total = document.querySelectorAll('.label-selector').length;
+            const btn = document.getElementById('labelFilterText');
+            const count = document.getElementById('selectedLabelCount');
+            if (btn) {
+                btn.textContent = checked === 0 ? '🔽 Filter Labels' :
+                                   checked === total ? '🔽 All Labels' :
+                                   '🔽 Filter Labels';
+            }
+            if (count) {
+                count.textContent = checked > 0 ? `${checked} selected` : '';
+            }
+        }
+
+        // Close label dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('labelFilterDropdown');
+            const button = document.getElementById('labelFilterBtn');
+            if (labelFilterDropdownOpen && dropdown && button && !dropdown.contains(e.target) && !button.contains(e.target)) {
+                toggleLabelFilterDropdown();
+            }
+        });
 
         // Select story
         async function selectStory(storyId) {
@@ -1883,10 +1977,11 @@
                         finishVotingBtn.style.display = 'block';
                         document.getElementById('startTimerBtn').disabled = false;
                         document.getElementById('startTimerBtn').textContent = 'Start Timer';
-                        document.getElementById('timerDisplay').textContent = '2:00';
+                        document.getElementById('timerDisplay').textContent = '5:00';
                         document.getElementById('timerProgress').style.width = '100%';
                         document.getElementById('timerDisplay').className = 'timer-display';
                         document.getElementById('timerProgress').className = 'timer-progress';
+                        document.getElementById('restartTimerBtn').style.display = 'none'; // Hide restart button
                         stopTimer(); // Clear any running timer
                     } else {
                         // Observers and participants see timer but can't control it
@@ -1897,7 +1992,7 @@
                         if (story.timerStartedAt) {
                             updateTimerDisplay(story);
                         } else {
-                            document.getElementById('timerDisplay').textContent = '2:00';
+                            document.getElementById('timerDisplay').textContent = '5:00';
                             document.getElementById('timerProgress').style.width = '100%';
                             document.getElementById('timerDisplay').className = 'timer-display';
                             document.getElementById('timerProgress').className = 'timer-progress';
@@ -2719,23 +2814,39 @@
             // Add label selection section
             if (labels.length > 0 || hasUnlabeled) {
                 summaryHtml += `
-                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0;">
-                        <div style="font-weight: 600; margin-bottom: 12px; color: #2d3748;">Select labels to calculate combined total:</div>
-                        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
-                            ${labels.map((label, idx) => `
-                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
-                                    <input type="checkbox" class="label-selector" value="${idx}" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
-                                    <span style="font-size: 13px;">📌 ${escapeHtml(label)}</span>
-                                </label>
-                            `).join('')}
-                            ${hasUnlabeled ? `
-                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
-                                    <input type="checkbox" class="label-selector" value="unlabeled" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
-                                    <span style="font-size: 13px;">No Label</span>
-                                </label>
-                            ` : ''}
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0; position: relative;">
+                        <div style="margin-bottom: 15px;">
+                            <button id="labelFilterBtn" onclick="toggleLabelFilterDropdown()" style="width: 100%; padding: 10px 12px; background: #0066b2; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                                <span id="labelFilterText">🔽 Filter Labels</span>
+                                <span style="font-size: 12px; opacity: 0.9;" id="selectedLabelCount"></span>
+                            </button>
                         </div>
-                        <div style="background: white; padding: 10px; border-radius: 4px; text-align: center;">
+
+                        <div id="labelFilterDropdown" style="display: none; position: absolute; background: white; border: 2px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 12px; width: calc(100% - 24px); max-height: 400px; z-index: 1000; top: 55px;">
+                            <input type="text" id="labelSearchInput" placeholder="Search labels..." oninput="filterLabelList(this.value)" style="width: 100%; padding: 8px 10px; border: 2px solid #e2e8f0; border-radius: 4px; margin-bottom: 10px; font-size: 13px; box-sizing: border-box;">
+
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <button onclick="selectAllLabels()" style="flex: 1; padding: 6px; background: #f7fafc; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500;">Select All</button>
+                                <button onclick="clearAllLabels()" style="flex: 1; padding: 6px; background: #f7fafc; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500;">Clear All</button>
+                            </div>
+
+                            <div style="max-height: 250px; overflow-y: auto; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                                ${labels.map((label, idx) => `
+                                    <label class="label-filter-option" style="display: flex; align-items: center; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; transition: background 0.2s;" onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='white'">
+                                        <input type="checkbox" class="label-selector" value="${idx}" onchange="updateSummaryCombinedTotal(); updateFilterButtonText();" style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer; accent-color: #0066b2;">
+                                        <span style="font-size: 13px; color: #2d3748;">📌 ${escapeHtml(label)}</span>
+                                    </label>
+                                `).join('')}
+                                ${hasUnlabeled ? `
+                                    <label class="label-filter-option" style="display: flex; align-items: center; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; transition: background 0.2s;" onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='white'">
+                                        <input type="checkbox" class="label-selector" value="unlabeled" onchange="updateSummaryCombinedTotal(); updateFilterButtonText();" style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer; accent-color: #0066b2;">
+                                        <span style="font-size: 13px; color: #2d3748;">No Label</span>
+                                    </label>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div style="background: white; padding: 10px; border-radius: 4px; text-align: center; margin-top: 15px;">
                             <span style="font-weight: 600; color: #2d3748;">Combined Total: <span id="combinedTotal" style="color: #667eea; font-size: 16px;">0</span></span>
                         </div>
                     </div>
@@ -2895,23 +3006,39 @@
             // Add label selection section
             if (labels.length > 0 || hasUnlabeled) {
                 summaryHtml += `
-                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0;">
-                        <div style="font-weight: 600; margin-bottom: 12px; color: #2d3748;">Select labels to calculate combined total:</div>
-                        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;">
-                            ${labels.map((label, idx) => `
-                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
-                                    <input type="checkbox" class="label-selector" value="${idx}" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
-                                    <span style="font-size: 13px;">📌 ${escapeHtml(label)}</span>
-                                </label>
-                            `).join('')}
-                            ${hasUnlabeled ? `
-                                <label style="display: flex; align-items: center; cursor: pointer; gap: 6px;">
-                                    <input type="checkbox" class="label-selector" value="unlabeled" onchange="updateSummaryCombinedTotal()" style="cursor: pointer;">
-                                    <span style="font-size: 13px;">No Label</span>
-                                </label>
-                            ` : ''}
+                    <div style="background: #f7fafc; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 2px solid #e2e8f0; position: relative;">
+                        <div style="margin-bottom: 15px;">
+                            <button id="labelFilterBtn" onclick="toggleLabelFilterDropdown()" style="width: 100%; padding: 10px 12px; background: #0066b2; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                                <span id="labelFilterText">🔽 Filter Labels</span>
+                                <span style="font-size: 12px; opacity: 0.9;" id="selectedLabelCount"></span>
+                            </button>
                         </div>
-                        <div style="background: white; padding: 10px; border-radius: 4px; text-align: center;">
+
+                        <div id="labelFilterDropdown" style="display: none; position: absolute; background: white; border: 2px solid #e2e8f0; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); padding: 12px; width: calc(100% - 24px); max-height: 400px; z-index: 1000; top: 55px;">
+                            <input type="text" id="labelSearchInput" placeholder="Search labels..." oninput="filterLabelList(this.value)" style="width: 100%; padding: 8px 10px; border: 2px solid #e2e8f0; border-radius: 4px; margin-bottom: 10px; font-size: 13px; box-sizing: border-box;">
+
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <button onclick="selectAllLabels()" style="flex: 1; padding: 6px; background: #f7fafc; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500;">Select All</button>
+                                <button onclick="clearAllLabels()" style="flex: 1; padding: 6px; background: #f7fafc; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500;">Clear All</button>
+                            </div>
+
+                            <div style="max-height: 250px; overflow-y: auto; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                                ${labels.map((label, idx) => `
+                                    <label class="label-filter-option" style="display: flex; align-items: center; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; transition: background 0.2s;" onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='white'">
+                                        <input type="checkbox" class="label-selector" value="${idx}" onchange="updateSummaryCombinedTotal(); updateFilterButtonText();" style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer; accent-color: #0066b2;">
+                                        <span style="font-size: 13px; color: #2d3748;">📌 ${escapeHtml(label)}</span>
+                                    </label>
+                                `).join('')}
+                                ${hasUnlabeled ? `
+                                    <label class="label-filter-option" style="display: flex; align-items: center; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; transition: background 0.2s;" onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='white'">
+                                        <input type="checkbox" class="label-selector" value="unlabeled" onchange="updateSummaryCombinedTotal(); updateFilterButtonText();" style="width: 16px; height: 16px; margin-right: 8px; cursor: pointer; accent-color: #0066b2;">
+                                        <span style="font-size: 13px; color: #2d3748;">No Label</span>
+                                    </label>
+                                ` : ''}
+                            </div>
+                        </div>
+
+                        <div style="background: white; padding: 10px; border-radius: 4px; text-align: center; margin-top: 15px;">
                             <span style="font-weight: 600; color: #2d3748;">Combined Total: <span id="combinedTotal" style="color: #667eea; font-size: 16px;">0</span></span>
                         </div>
                     </div>
@@ -3412,7 +3539,9 @@
 
         async function directRejoin(code) {
             // Find session and rejoin without asking for details
-            const session = allSessions.find(s => s.code === code);
+            // Prioritize newer sessions if multiple have the same code
+            const matchingSessions = allSessions.filter(s => s.code === code);
+            const session = matchingSessions.length > 0 ? matchingSessions[matchingSessions.length - 1] : null;
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
