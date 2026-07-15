@@ -641,7 +641,8 @@
     <!-- Password Modal -->
     <div class="modal" id="passwordModal">
         <div class="modal-content" style="max-width: 400px;">
-            <h3 style="color: #2d3748; margin-bottom: 20px;">Planning Poker Access</h3>
+            <h3 style="color: #2d3748; margin-bottom: 8px;">Planning Poker Access</h3>
+            <p style="color: #a0aec0; font-size: 12px; margin-bottom: 16px;">v<span id="passwordScreenVersion">1.0</span></p>
             <p style="color: #718096; margin-bottom: 20px;">Enter the password to access this session:</p>
             <div class="form-group" style="position: relative; margin-bottom: 20px;">
                 <input type="password" id="passwordInput" placeholder="Enter password" style="margin-bottom: 0; padding-right: 45px;">
@@ -1085,6 +1086,7 @@
         window.addEventListener('load', () => {
             // Display app version
             document.getElementById('versionDisplay').textContent = `v${APP_VERSION}`;
+            document.getElementById('passwordScreenVersion').textContent = APP_VERSION;
 
             // Check if user was already authenticated
             if (localStorage.getItem('planningPokerAuth') === 'true') {
