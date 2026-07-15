@@ -1043,7 +1043,7 @@
             // Check if user is a returning member
             const storageKey = `user_${joinCode}`;
             const storedUserId = localStorage.getItem(storageKey);
-            const isReturningUser = storedUserId && session.participants.some(p => p.id === storedUserId);
+            const isReturningUser = storedUserId && (session.participants || []).some(p => p.id === storedUserId);
 
             if (isReturningUser) {
                 // Rejoin directly for returning users
@@ -1530,10 +1530,9 @@
             const session = allSessions.find(s => s.id === sessionId);
             if (!session) return;
 
-            // Ensure stories array exists
-            if (!session.stories) {
-                session.stories = [];
-            }
+            // Ensure participants and stories arrays exist (Firebase drops empty arrays)
+            if (!session.participants) session.participants = [];
+            if (!session.stories) session.stories = [];
 
             const statusText = session.status === 'pending' ? 'Pending' : session.status === 'active' ? 'Active' : session.status === 'paused' ? 'Paused' : 'Closed';
             document.getElementById('sessionTitle').innerHTML = `${session.name} <span class="session-status-badge ${session.status}">${statusText}</span>`;
@@ -2069,22 +2068,19 @@
                     `;
                     document.getElementById('votesDisplay').innerHTML = votingMessage;
                 } else if (currentRole === 'participant' && story.finished && isCurrentVotingStory) {
-                    // Show voting complete message for participants
+                    // Show completion banner above the votes list
                     const completionMessage = `
                         <div style="background: #c6f6d5; border: 2px solid #22863a; border-radius: 6px; padding: 15px; margin-bottom: 15px; color: #22543d;">
                             <strong style="font-size: 16px;">✓ Voting Complete</strong><br>
                             <span style="font-size: 14px;">The team has finished estimating. See the results and discussion below.</span>
                         </div>
                     `;
-                    document.getElementById('votesDisplay').innerHTML = completionMessage;
                     renderVotes(story);
+                    document.getElementById('votesDisplay').innerHTML = completionMessage + document.getElementById('votesDisplay').innerHTML;
                 } else if (currentRole !== 'observer' || story.finished) {
                     // Show votes for non-observers or when voting is finished
                     renderVotes(story);
                 }
-
-                // Show vote summary for all roles (includes info banner if viewing previous results)
-                renderVotes(story);
             }
         }
 
@@ -2132,7 +2128,7 @@
             const story = session.stories.find(s => s.id === storyId);
 
             // Check if voting has been officially started by facilitator
-            if (story.votingStarted === false) {
+            if (!story.votingStarted) {
                 showToast('Voting has not started yet. Wait for the facilitator to start the timer.', 'error');
                 return;
             }
@@ -2171,7 +2167,7 @@
             let votesHtml = '';
             if (Object.keys(displayVotes).length > 0) {
                 const voteList = Object.entries(displayVotes).map(([userId, value]) => {
-                    const participant = session.participants.find(p => p.id === userId);
+                    const participant = (session.participants || []).find(p => p.id === userId);
                     const isOwnVote = userId === currentUserId;
                     return `
                         <div style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
@@ -3193,7 +3189,8 @@
                     const storyCount = (s.stories || []).length;
                     const storageKey = `user_${s.code}`;
                     const storedUserId = localStorage.getItem(storageKey);
-                    const isReturningUser = storedUserId && s.participants.some(p => p.id === storedUserId);
+                    const participants = s.participants || [];
+                    const isReturningUser = storedUserId && participants.some(p => p.id === storedUserId);
                     const buttonText = isReturningUser ? 'Re-Join' : 'Join';
                     const buttonAction = isReturningUser ? `directRejoin('${s.code}')` : `fillSessionCode('${s.code}')`;
 
@@ -3207,7 +3204,7 @@
                                 <span style="display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; ${statusBadgeClass}">${statusText}</span>
                             </div>
                             <p style="font-size: 12px; color: #718096; margin: 8px 0;">
-                                Code: <strong>${s.code}</strong> | ${s.participants.length} participant(s) | ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}
+                                Code: <strong>${s.code}</strong> | ${participants.length} participant(s) | ${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'}
                             </p>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="${buttonAction}">${buttonText}</button>
                         </div>
@@ -3240,7 +3237,7 @@
                         <div class="card" style="margin-bottom: 10px;">
                             <strong>${s.name}</strong>
                             <p style="font-size: 12px; color: #718096; margin: 8px 0;">
-                                Created: ${createdDate} | ${s.participants.length} participant(s) | ${completedStories}/${storyCount} stories estimated
+                                Created: ${createdDate} | ${(s.participants || []).length} participant(s) | ${completedStories}/${storyCount} stories estimated
                             </p>
                             <button class="btn btn-primary" style="width: 100%; margin-top: 10px;" onclick="viewPastSessionDetails('${s.id}')">View Details</button>
                             ${deleteButton}
@@ -3277,8 +3274,9 @@
             if (!session) return;
 
             document.getElementById('sessionTitle').innerHTML = `${session.name} <span class="session-status-badge closed">Closed</span>`;
+            const sessionParticipants = session.participants || [];
             document.getElementById('sessionStats').textContent =
-                `Created: ${new Date(session.createdAt).toLocaleString()} | ${session.participants.length} participant(s) | ${(session.stories || []).length} stor${(session.stories || []).length !== 1 ? 'ies' : 'y'}`;
+                `Created: ${new Date(session.createdAt).toLocaleString()} | ${sessionParticipants.length} participant(s) | ${(session.stories || []).length} stor${(session.stories || []).length !== 1 ? 'ies' : 'y'}`;
 
             // Update empty state message for past sessions
             document.getElementById('emptyStateText').textContent = 'Select a story to view details';
@@ -3322,7 +3320,7 @@
             summaryBtn.style.display = 'block';
 
             // Create and inject a move stories button only for closed/active sessions with un-estimated stories
-            const unestimatedStories = session.stories.filter(s => !s.estimate || s.estimate === null || s.estimate === undefined);
+            const unestimatedStories = (session.stories || []).filter(s => !s.estimate || s.estimate === null || s.estimate === undefined);
             let moveStoriesBtn = document.getElementById('moveStoriesBtn');
             // Only show Move Stories button for closed sessions (past sessions view), not for pending sessions
             if (unestimatedStories.length > 0 && session.status === 'closed') {
@@ -3343,7 +3341,7 @@
                 moveStoriesBtn.style.display = 'none';
             }
 
-            renderParticipants(session.participants);
+            renderParticipants(session.participants || []);
             renderPastStories(session.stories || []);
         }
 
@@ -3434,7 +3432,7 @@
             }
 
             // If keeping old code, copy all participants; if new code, start fresh
-            const newParticipants = useOldCode ? [...session.participants] : [];
+            const newParticipants = useOldCode ? [...(session.participants || [])] : [];
 
             const newSession = {
                 id: newSessionId,
@@ -3547,7 +3545,7 @@
             const manualIndicator = story.estimateManuallyChanged ? ` <span style="background: #feebc8; color: #c05621; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px; font-weight: 600;" title="Calculated: ${story.calculatedEstimate || 'unknown'}">✏️ Manual</span>` : '';
 
             let detailsHtml = `
-                <h3 style="color: #2d3748; margin-bottom: 10px;">${story.title}</h3>
+                <h3 style="color: #2d3748; margin-bottom: 10px;">${escapeHtml(story.title)}</h3>
             `;
 
             // Only show estimate if it exists, otherwise show moved indicator (only if moved to different session)
@@ -3577,10 +3575,10 @@
                 detailsHtml += questions.map(q => `
                     <div style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #0066b2;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span style="font-weight: 600; color: #2d3748;">${q.authorName}</span>
+                            <span style="font-weight: 600; color: #2d3748;">${escapeHtml(q.authorName)}</span>
                             <span style="color: #a0aec0; font-size: 12px;">${new Date(q.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <p style="color: #4a5568; margin: 0;">${q.text}</p>
+                        <p style="color: #4a5568; margin: 0;">${escapeHtml(q.text)}</p>
                     </div>
                 `).join('');
             }
@@ -3703,7 +3701,6 @@
             document.getElementById('feedbackBtn').style.display = 'none';
             document.querySelector('.home-view').classList.add('active');
             document.querySelector('.session-view').classList.remove('active');
-            document.getElementById('sessionsList').style.display = 'none';
         }
 
         function showToast(message, type = 'success') {
