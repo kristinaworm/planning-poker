@@ -1121,7 +1121,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.55'; // Updated 2026-07-15: Fixed close session race condition with auto-refresh
+        const APP_VERSION = '1.0.56'; // Updated 2026-07-15: Fixed close session using targeted Firebase PATCH
 
         // Firebase Anonymous Auth -- get an ID token for REST API calls
         let firebaseAuthToken = null;
@@ -1166,6 +1166,24 @@
                 throw new Error(`Firebase error: ${response.status}`);
             } catch (error) {
                 console.error('Firebase GET error:', error);
+                return null;
+            }
+        }
+
+        async function firebasePatch(path, data) {
+            try {
+                const url = `${firebaseConfig.databaseURL}/${path}.json${authQuery()}`;
+                const response = await fetch(url, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    return await response.json();
+                }
+                throw new Error(`Firebase error: ${response.status}`);
+            } catch (error) {
+                console.error('Firebase PATCH error:', error);
                 return null;
             }
         }
@@ -2816,8 +2834,19 @@
             if (confirm('Close this session?')) {
                 stopAutoRefresh();
                 const session = allSessions.find(s => s.id === currentSessionId);
+                if (!session) {
+                    showToast('Session not found', 'error');
+                    return;
+                }
                 session.status = 'closed';
-                await saveData();
+
+                // Patch just this session's status directly — more reliable than a full PUT
+                if (useFirebase) {
+                    await firebasePatch(`sessions/${currentSessionId}`, { status: 'closed' });
+                }
+                // Always update localStorage
+                localStorage.setItem('planningPokerSessions', JSON.stringify(allSessions));
+
                 goHome();
                 showToast('Session closed');
             }
