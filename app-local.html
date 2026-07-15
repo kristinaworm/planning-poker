@@ -1121,7 +1121,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.53'; // Updated 2026-07-15: Fixed join crash and multiple Firebase empty-array bugs, fixed XSS in story title
+        const APP_VERSION = '1.0.55'; // Updated 2026-07-15: Fixed close session race condition with auto-refresh
 
         // Firebase Anonymous Auth -- get an ID token for REST API calls
         let firebaseAuthToken = null;
@@ -1242,14 +1242,16 @@
         async function saveData() {
             const sessionsObj = {};
             allSessions.forEach(s => sessionsObj[s.id] = s);
+            const sessionsSnapshot = JSON.stringify(allSessions);
 
             if (useFirebase) {
                 const result = await firebasePut('sessions', sessionsObj);
                 // If Firebase failed, it will have set useFirebase = false
             }
 
-            // Always save to localStorage as backup
-            localStorage.setItem('planningPokerSessions', JSON.stringify(allSessions));
+            // Always save to localStorage as backup — use pre-await snapshot so a
+            // concurrent auto-refresh loadData() can't overwrite what we intended to save
+            localStorage.setItem('planningPokerSessions', sessionsSnapshot);
         }
 
         // Track previous story state to detect resets
@@ -1495,10 +1497,16 @@
 
             // Check if facilitator role is already taken
             if (role === 'facilitator') {
-                const facilitatorExists = session.participants.some(p => p.role === 'facilitator');
-                if (facilitatorExists) {
-                    showToast('This session already has a facilitator. Join as participant or observer instead.', 'error');
-                    return;
+                const existingFacilitator = session.participants.find(p => p.role === 'facilitator');
+                if (existingFacilitator) {
+                    const takeover = confirm(`This session already has a facilitator (${existingFacilitator.name}).\n\nAre you joining from a new device or browser? Click OK to take over as facilitator, or Cancel to join as a participant instead.`);
+                    if (takeover) {
+                        // Remove the stale facilitator entry and proceed as new facilitator
+                        session.participants = session.participants.filter(p => p.role !== 'facilitator');
+                    } else {
+                        showToast('Joining as participant instead.', 'error');
+                        return;
+                    }
                 }
             }
 
@@ -2806,6 +2814,7 @@
                 return;
             }
             if (confirm('Close this session?')) {
+                stopAutoRefresh();
                 const session = allSessions.find(s => s.id === currentSessionId);
                 session.status = 'closed';
                 await saveData();
