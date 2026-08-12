@@ -1123,7 +1123,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.57'; // Updated 2026-07-15: Fixed close session Firebase fallback to localStorage
+        const APP_VERSION = '1.0.58'; // Updated 2026-08-12: Fixed facilitator takeover impersonation and vote-clobbering race
 
         // Firebase Anonymous Auth -- get an ID token for REST API calls
         let firebaseAuthToken = null;
@@ -1517,16 +1517,23 @@
             }
 
             // Check if facilitator role is already taken
+            let effectiveRole = role;
             if (role === 'facilitator') {
                 const existingFacilitator = session.participants.find(p => p.role === 'facilitator');
                 if (existingFacilitator) {
-                    const takeover = confirm(`This session already has a facilitator (${existingFacilitator.name}).\n\nAre you joining from a new device or browser? Click OK to take over as facilitator, or Cancel to join as a participant instead.`);
-                    if (takeover) {
-                        // Remove the stale facilitator entry and proceed as new facilitator
-                        session.participants = session.participants.filter(p => p.role !== 'facilitator');
+                    const sameName = existingFacilitator.name.trim().toLowerCase() === participantName.trim().toLowerCase();
+                    if (sameName) {
+                        const takeover = confirm(`This session already has a facilitator (${existingFacilitator.name}).\n\nAre you joining from a new device or browser? Click OK to take over as facilitator, or Cancel to join as a participant instead.`);
+                        if (takeover) {
+                            // Remove the stale facilitator entry and proceed as new facilitator
+                            session.participants = session.participants.filter(p => p.role !== 'facilitator');
+                        } else {
+                            effectiveRole = 'participant';
+                        }
                     } else {
-                        showToast('Joining as participant instead.', 'error');
-                        return;
+                        // Name doesn't match the existing facilitator - can't verify identity, so don't allow takeover
+                        showToast(`${existingFacilitator.name} is already the facilitator for this session. Joining as a participant instead.`, 'error');
+                        effectiveRole = 'participant';
                     }
                 }
             }
@@ -1534,13 +1541,13 @@
             // New user joining
             userId = generateId();
             localStorage.setItem(storageKey, userId);
-            session.participants.push({ id: userId, name: participantName, role: role });
+            session.participants.push({ id: userId, name: participantName, role: effectiveRole });
             await saveData();
 
             currentSessionId = session.id;
             currentUserId = userId;
-            currentRole = role;
-            currentUser = { id: userId, name: participantName, role: role };
+            currentRole = effectiveRole;
+            currentUser = { id: userId, name: participantName, role: effectiveRole };
 
             closeModal('joinSessionModal');
             await enterSession(session.id);
@@ -2169,7 +2176,22 @@
 
             if (!story.votes) story.votes = {};
             story.votes[currentUserId] = value;
-            await saveData();
+
+            // Patch only this user's vote instead of overwriting the whole sessions
+            // object (saveData()'s full PUT), which would clobber other participants'
+            // concurrent votes if their save landed first.
+            if (useFirebase) {
+                const storyIndex = session.stories.findIndex(s => s.id === storyId);
+                const result = await firebasePatch(`sessions/${session.id}/stories/${storyIndex}/votes`, { [currentUserId]: value });
+                if (result === null) {
+                    // Patch failed; firebasePatch already set useFirebase = false
+                    await saveData();
+                } else {
+                    localStorage.setItem('planningPokerSessions', JSON.stringify(allSessions));
+                }
+            } else {
+                await saveData();
+            }
 
             renderVoteCards(story);
             renderVotes(story);
