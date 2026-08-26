@@ -1036,9 +1036,7 @@
 
             // Load sessions to check if it exists
             await loadData();
-            // Prioritize newer sessions if multiple have the same code
-            const matchingSessions = allSessions.filter(s => s.code === joinCode);
-            const session = matchingSessions.length > 0 ? matchingSessions[matchingSessions.length - 1] : null;
+            const session = findLatestSessionByCode(joinCode, true);
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
@@ -1126,7 +1124,7 @@
         let refreshInterval = null;
         let selectedJiraIssues = [];
         const CARD_VALUES = [1, 2, 3, 5, 8, 13, '?'];
-        const APP_VERSION = '1.0.60'; // Updated 2026-08-12: Fixed card text/button spacing regression from v1.0.59
+        const APP_VERSION = '1.0.61'; // Updated 2026-08-26: Fixed rejoin picking wrong session when a moved/new session reuses a closed session's code
 
         // Firebase Anonymous Auth -- get an ID token for REST API calls
         let firebaseAuthToken = null;
@@ -1391,6 +1389,25 @@
             return Math.random().toString(36).substr(2, 6).toUpperCase();
         }
 
+        // Find the right session when multiple sessions share the same code (e.g. after
+        // "keep the same code" on a moved session). allSessions loaded from Firebase is
+        // ordered by Firebase's own child-key sort (lexicographic, since ids are random
+        // strings) rather than creation order, so array position cannot be used to find
+        // the "newest" match — createdAt must be compared explicitly. When preferOpen is
+        // true, a still-open session always wins over a closed one with the same code,
+        // even if the closed one has a later createdAt.
+        function findLatestSessionByCode(code, preferOpen = false) {
+            let matches = allSessions.filter(s => s.code === code);
+            if (preferOpen) {
+                const openMatches = matches.filter(s => s.status !== 'closed');
+                if (openMatches.length > 0) matches = openMatches;
+            }
+            if (matches.length === 0) return null;
+            return matches.reduce((newest, s) =>
+                (!newest || new Date(s.createdAt) > new Date(newest.createdAt)) ? s : newest
+            , null);
+        }
+
         function getUnreadQuestionCount(story) {
             if (currentRole !== 'facilitator') return 0;
             if (!story.questions) return 0;
@@ -1488,9 +1505,13 @@
             }
 
             await loadData();
-            // Find session by code, prioritizing newer sessions (last created) if multiple exist
-            const matchingSessions = allSessions.filter(s => s.code === code && (s.status === 'active' || s.status === 'pending' || s.status === 'paused'));
-            const session = matchingSessions.length > 0 ? matchingSessions[matchingSessions.length - 1] : null;
+            // Closed sessions are never eligible here (unlike findLatestSessionByCode's
+            // preferOpen fallback) - an old closed session sharing this code should never
+            // be joinable by code lookup.
+            const openMatches = allSessions.filter(s => s.code === code && s.status !== 'closed');
+            const session = openMatches.length > 0
+                ? openMatches.reduce((newest, s) => (!newest || new Date(s.createdAt) > new Date(newest.createdAt)) ? s : newest, null)
+                : null;
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
@@ -3663,9 +3684,7 @@
 
         async function directRejoin(code) {
             // Find session and rejoin without asking for details
-            // Prioritize newer sessions if multiple have the same code
-            const matchingSessions = allSessions.filter(s => s.code === code);
-            const session = matchingSessions.length > 0 ? matchingSessions[matchingSessions.length - 1] : null;
+            const session = findLatestSessionByCode(code, true);
             if (!session) {
                 showToast('Session not found', 'error');
                 return;
